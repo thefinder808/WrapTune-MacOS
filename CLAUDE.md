@@ -106,15 +106,24 @@ macOS). Guard against the known empty-path .NET bug on some macOS releases.
 ## Build sequence (see ~/.claude/plans for the full plan)
 
 0. ✅ Scaffold (sln + Packaging lib + tests, net10.0)
-1. Engine + MSI reader + validation tests  ← current
-2. Avalonia UI
-3. Build/dist (.app/.dmg, .icns, build-macos.sh, CI)
-4. Code signing + notarization (Apple Developer ID, notarytool, stapler)
-6. Docs + create private GitHub repo + push; Obsidian note cross-linking WrapTune
+1. ✅ Engine (EXE path) + round-trip/golden-fixture/structure tests (13 tests)
+   — ⬜ MSI/OLE2 Property-table reader still to do (`Msi/MsiPropertyReader.cs`)
+2. ✅ Avalonia UI (`src/WrapTuneMacOS`) + 3 headless smoke tests
+3. ⬜ Build/dist (.app/.dmg, .icns, build-macos.sh, CI)  ← next
+4. ⬜ Code signing + notarization (Apple Developer ID, notarytool, stapler)
+6. ⬜ Docs polish; ✅ private GitHub repo created + pushed
+      (github.com/thefinder808/WrapTuneMacOS); Obsidian note still to add
 
 ## Gotchas
 
 - Only the **.NET 10 SDK/runtime** is installed locally; net8 is absent — hence net10.0.
 - `.slnx` (not `.sln`) — .NET 10 default solution format. Use `dotnet sln WrapTuneMacOS.slnx ...`.
 - Avalonia templates are not installed; the UI project adds Avalonia via NuGet refs directly.
+- **Avalonia pinned to 11.3.17** (the plan's 11.x line). 12.x removes the classic
+  `DragEventArgs.Data` API in favour of `DataTransfer`; on 11.3.x `e.Data.GetFiles()`
+  works but warns CS0618 — left as-is until a deliberate 12.x migration.
+- The UI test project is named `WrapTuneMacOS.App.Tests` but its **namespace is
+  `WrapTuneMacOS.UiTests`** — `namespace WrapTuneMacOS.App.*` would shadow the `App` class.
+- Headless UI tests use `Avalonia.Headless.XUnit` (`[AvaloniaFact]`); theme-dictionary
+  resources resolve only via the **variant-aware** `TryFindResource(key, variant, out _)`.
 - Never commit signing material (`.p12`, `.p8`) — see `.gitignore`.
