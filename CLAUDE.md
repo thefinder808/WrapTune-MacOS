@@ -109,10 +109,13 @@ macOS). Guard against the known empty-path .NET bug on some macOS releases.
 1. ✅ Engine (EXE + MSI) + round-trip/golden/structure/MSI tests (17 tests)
    — ✅ MSI/OLE2 reader (`Msi/`), calibrated against a real MSI
 2. ✅ Avalonia UI (`src/WrapTuneMacOS`) + 3 headless smoke tests
-3. ⬜ Build/dist (.app/.dmg, .icns, build-macos.sh, CI)  ← next
-4. ⬜ Code signing + notarization (Apple Developer ID, notarytool, stapler)
-6. ⬜ Docs polish; ✅ private GitHub repo created + pushed
-      (github.com/thefinder808/WrapTuneMacOS); Obsidian note still to add
+3. ✅ Build/dist: `build-macos.sh` (.app → .dmg via hdiutil), committed `.icns`
+      (`tools/generate-icns.py`), `macos-latest` CI in `.github/workflows/release.yml`
+4. ✅ Signing + notarization WIRED (Hardened Runtime + `build/entitlements.plist`,
+      codesign → notarytool → stapler); gated on `release`-env secrets, degrades
+      to unsigned until added. Setup checklist: `docs/RELEASE-SIGNING.md`
+6. ⬜ Obsidian note cross-linking WrapTune; ✅ README/CLAUDE + signing docs;
+      ✅ private GitHub repo (github.com/thefinder808/WrapTuneMacOS)
 
 ## Gotchas
 

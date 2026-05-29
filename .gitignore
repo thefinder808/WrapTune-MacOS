@@ -23,9 +23,11 @@ coverage*.xml
 *.coverage
 
 # Build / distribution artifacts
+dist/
 *.app
 *.dmg
 *.pkg
+*.iconset
 
 # Local signing material — never commit
 *.p12
