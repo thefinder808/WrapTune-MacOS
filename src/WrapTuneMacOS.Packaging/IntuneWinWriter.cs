@@ -115,7 +115,18 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
             ct.ThrowIfCancellationRequested();
             EncryptToFile(innerZip, encrypted, encryptionKey, macKey, iv);
 
-            // ── 7. Detection.xml ────────────────────────────────────────────
+            // ── 7. MSI metadata (only for .msi setup files) ────────────────
+            MsiInfo? msiInfo = null;
+            if (Path.GetExtension(setupFile).Equals(".msi", StringComparison.OrdinalIgnoreCase))
+            {
+                log?.Report("Reading MSI metadata…");
+                msiInfo = Msi.MsiPropertyReader.TryRead(setupFile);
+                log?.Report(msiInfo is null
+                    ? "WARNING  Could not read MSI metadata; packaging without MsiInfo."
+                    : $"MSI: {msiInfo.MsiProductCode} {msiInfo.MsiProductVersion}");
+            }
+
+            // ── 8. Detection.xml ────────────────────────────────────────────
             log?.Report("Writing Detection.xml…");
             var detection = new DetectionXml
             {
@@ -130,10 +141,11 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
                     Mac = Convert.ToBase64String(ReadMac(encrypted)),
                     FileDigest = Convert.ToBase64String(fileDigest),
                 },
+                MsiInfo = msiInfo,
             };
             var detectionBytes = detection.ToBytes();
 
-            // ── 8. Assemble the outer OPC zip ──────────────────────────────
+            // ── 9. Assemble the outer OPC zip ──────────────────────────────
             log?.Report("Assembling package…");
             ct.ThrowIfCancellationRequested();
             if (File.Exists(outputPath))
