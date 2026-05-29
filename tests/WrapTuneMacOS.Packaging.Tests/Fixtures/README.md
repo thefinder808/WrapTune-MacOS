@@ -37,8 +37,22 @@ confidence before any release that touches the format.
 
 ## MSI fixtures
 
-For the MSI reader phase, also commit one or more small sample `.msi` files under
-`Fixtures/msi/` with their known ProductCode / ProductVersion / UpgradeCode /
-PackageCode recorded alongside, so `MsiPropertyReader` can be unit-tested.
+`MsiReaderTests` validates the OLE2/MSI parser against a real `.msi`. It looks for one:
+
+1. the `WRAPTUNE_MSI_FIXTURE` env var (an absolute path to any `.msi`), or
+2. any `*.msi` under `Fixtures/msi/`.
+
+If neither is present it self-skips. For CI, commit a **small** sample `.msi`
+under `Fixtures/msi/` (record its known ProductCode / ProductVersion /
+UpgradeCode / PackageCode in a sibling note). For local runs against a large MSI,
+point the env var at it, e.g.:
+
+```bash
+WRAPTUNE_MSI_FIXTURE=~/Downloads/WrapTune.msi dotnet test
+```
+
+The parser was calibrated against WrapTune's own MSI (publisher `thefinder808`,
+upgrade code `{B7E4F831-…}`); the test asserts those values when the fixture is
+named `WrapTune.msi`.
 
 > Never commit anything sensitive. These are throwaway test installers only.

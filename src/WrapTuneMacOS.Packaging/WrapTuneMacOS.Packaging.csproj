@@ -6,4 +6,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Tests exercise the internal CFBF/MSI parsers directly. -->
+    <InternalsVisibleTo Include="WrapTuneMacOS.Packaging.Tests" />
+  </ItemGroup>
+
 </Project>

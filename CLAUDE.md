@@ -106,8 +106,8 @@ macOS). Guard against the known empty-path .NET bug on some macOS releases.
 ## Build sequence (see ~/.claude/plans for the full plan)
 
 0. ✅ Scaffold (sln + Packaging lib + tests, net10.0)
-1. ✅ Engine (EXE path) + round-trip/golden-fixture/structure tests (13 tests)
-   — ⬜ MSI/OLE2 Property-table reader still to do (`Msi/MsiPropertyReader.cs`)
+1. ✅ Engine (EXE + MSI) + round-trip/golden/structure/MSI tests (17 tests)
+   — ✅ MSI/OLE2 reader (`Msi/`), calibrated against a real MSI
 2. ✅ Avalonia UI (`src/WrapTuneMacOS`) + 3 headless smoke tests
 3. ⬜ Build/dist (.app/.dmg, .icns, build-macos.sh, CI)  ← next
 4. ⬜ Code signing + notarization (Apple Developer ID, notarytool, stapler)
