@@ -56,15 +56,24 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
     private static PackageResult PackageCore(PackageRequest request, IProgress<string>? log, CancellationToken ct)
     {
         // ── Validate ────────────────────────────────────────────────────────
-        var sourceFolder = Path.GetFullPath(request.SourceFolder);
+        // TrimEndingDirectorySeparator so a user-supplied trailing slash on the
+        // source folder doesn't break the containment check below.
+        var sourceFolder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(request.SourceFolder));
         var setupFile = Path.GetFullPath(request.SetupFile);
 
         if (!Directory.Exists(sourceFolder))
             return PackageResult.Fail("Source folder does not exist.");
         if (!File.Exists(setupFile))
             return PackageResult.Fail("Setup file does not exist.");
-        if (!setupFile.StartsWith(sourceFolder + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+
+        // The setup file must live inside the source folder (the format records a
+        // relative path). GetRelativePath normalises trailing slashes; a result
+        // that escapes upward ("..") or stays absolute means it's outside.
+        var relative = Path.GetRelativePath(sourceFolder, setupFile);
+        if (Path.IsPathRooted(relative) || relative == ".." ||
+            relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
             return PackageResult.Fail("Setup file must be inside the source folder.");
+
         if (string.IsNullOrWhiteSpace(request.OutputFolder))
             return PackageResult.Fail("Output folder is not specified.");
 
@@ -72,7 +81,7 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
 
         // The target is a Windows endpoint, so the recorded setup path uses
         // backslashes to match the official tool's output.
-        var setupRelative = Path.GetRelativePath(sourceFolder, setupFile)
+        var setupRelative = relative
             .Replace(Path.DirectorySeparatorChar, '\\')
             .Replace('/', '\\');
         var setupName = Path.GetFileName(setupFile);
