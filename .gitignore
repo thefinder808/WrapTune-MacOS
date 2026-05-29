@@ -1,0 +1,34 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+publish/
+*.user
+
+# Rider / VS / VS Code
+.idea/
+.vs/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Test results
+[Tt]est[Rr]esults/
+*.trx
+coverage*.json
+coverage*.xml
+*.coverage
+
+# Build / distribution artifacts
+*.app
+*.dmg
+*.pkg
+
+# Local signing material — never commit
+*.p12
+*.cer
+*.mobileprovision
+AuthKey_*.p8
