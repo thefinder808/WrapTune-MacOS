@@ -8,9 +8,11 @@
 #   CONFIG           dotnet config      (default Release)
 #   VERSION          marketing version  (default 1.0.0)
 #   SIGN_IDENTITY    "Developer ID Application: NAME (TEAMID)" — enables codesign
+#   NOTARY_PROFILE   xcrun notarytool keychain profile name → notarize (local Mac)
 #   NOTARY_KEY_PATH  App Store Connect API key (.p8) path       \
-#   NOTARY_KEY_ID    key id                                      } all three → notarize
+#   NOTARY_KEY_ID    key id                                      } all three → notarize (CI)
 #   NOTARY_ISSUER    issuer id                                  /
+# (NOTARY_PROFILE takes precedence over the API-key trio when both are set.)
 #
 set -euo pipefail
 
@@ -89,9 +91,16 @@ ln -s /Applications "$STAGE/Applications"
 hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
 rm -rf "$STAGE"
 
-# ── Notarize + staple (only with full API-key creds) ──
-if [[ -n "${SIGN_IDENTITY:-}" && -n "${NOTARY_KEY_PATH:-}" && -n "${NOTARY_KEY_ID:-}" && -n "${NOTARY_ISSUER:-}" ]]; then
-    echo "==> notarize + staple"
+# ── Notarize + staple ──
+# Local: a stored keychain profile (xcrun notarytool store-credentials …).
+# CI:    an App Store Connect API key (no keychain on the runner).
+if [[ -n "${SIGN_IDENTITY:-}" && -n "${NOTARY_PROFILE:-}" ]]; then
+    echo "==> notarize (keychain profile '$NOTARY_PROFILE') + staple"
+    xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
+    xcrun stapler staple "$DMG"
+    xcrun stapler validate "$DMG"
+elif [[ -n "${SIGN_IDENTITY:-}" && -n "${NOTARY_KEY_PATH:-}" && -n "${NOTARY_KEY_ID:-}" && -n "${NOTARY_ISSUER:-}" ]]; then
+    echo "==> notarize (API key) + staple"
     xcrun notarytool submit "$DMG" \
         --key "$NOTARY_KEY_PATH" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --wait
     xcrun stapler staple "$DMG"
