@@ -143,6 +143,24 @@ public sealed class RoundTripTests
     }
 
     [Fact]
+    public async Task Accepts_source_folder_with_trailing_separator()
+    {
+        var ws = new TestWorkspace();
+        using var _ = ws;
+        ws.AddSourceFile("setup.ps1", "x"u8.ToArray());
+
+        // A trailing slash on the source folder (as folder pickers often return)
+        // must not break the "setup file is inside" check.
+        var result = await new IntuneWinWriter().PackageAsync(new PackageRequest(
+            ws.Source + Path.DirectorySeparatorChar,
+            Path.Combine(ws.Source, "setup.ps1"),
+            ws.Output, Overwrite: true));
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("setup.ps1", IntuneWinReader.Read(result.OutputPath!).Detection.SetupFile);
+    }
+
+    [Fact]
     public async Task Rejects_setup_file_outside_source_folder()
     {
         var ws = new TestWorkspace();
