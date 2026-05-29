@@ -22,4 +22,10 @@
     <ProjectReference Include="..\..\src\WrapTuneMacOS.Packaging\WrapTuneMacOS.Packaging.csproj" />
   </ItemGroup>
 
+  <!-- Golden fixtures (official .intunewin + source). Copied if present; the
+       golden tests self-skip when absent. See Fixtures/README.md. -->
+  <ItemGroup>
+    <None Include="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="Fixtures" />
+  </ItemGroup>
+
 </Project>
