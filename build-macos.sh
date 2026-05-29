@@ -39,7 +39,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 echo "==> dotnet publish ($RID, $CONFIG)"
 dotnet publish "$PROJECT" -c "$CONFIG" -r "$RID" --self-contained true \
-    -p:UseAppHost=true -p:PublishSingleFile=false -o "$PUBLISH"
+    -p:UseAppHost=true -p:PublishSingleFile=false \
+    -p:DebugType=none -p:DebugSymbols=false -o "$PUBLISH"
 
 echo "==> Assembling $(basename "$APP")"
 cp -R "$PUBLISH"/. "$APP/Contents/MacOS/"
@@ -69,15 +70,15 @@ PLIST
 
 # ── Code signing (only when SIGN_IDENTITY is set) ──
 if [[ -n "${SIGN_IDENTITY:-}" ]]; then
-    echo "==> codesign (Hardened Runtime)"
-    # Sign nested Mach-O (native dylibs + the apphost) first, then the bundle.
-    while IFS= read -r -d '' f; do
-        codesign --force --options runtime --timestamp \
-            --entitlements "$ENTITLEMENTS" --sign "$SIGN_IDENTITY" "$f"
-    done < <(find "$APP/Contents/MacOS" -type f \( -name "*.dylib" -o -name "$EXE_NAME" \) -print0)
-    codesign --force --options runtime --timestamp \
+    echo "==> codesign (Hardened Runtime, deep)"
+    # .NET's self-contained layout drops native dylibs, managed dlls and data
+    # files all into Contents/MacOS — codesign treats that as the code area and
+    # rejects any loose unsigned file. --deep signs all nested code in one pass
+    # and seals the rest. The bundle is flat (no nested .app/.framework), so
+    # --deep is safe and notarizes; entitlements apply to the main executable.
+    codesign --force --deep --options runtime --timestamp \
         --entitlements "$ENTITLEMENTS" --sign "$SIGN_IDENTITY" "$APP"
-    codesign --verify --strict --verbose=2 "$APP"
+    codesign --verify --deep --strict --verbose=2 "$APP"
 else
     echo "==> SIGN_IDENTITY unset — UNSIGNED build (skip codesign)"
 fi
