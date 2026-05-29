@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/WrapTuneMacOS.Packaging/WrapTuneMacOS.Packaging.csproj" />
+    <Project Path="src/WrapTuneMacOS/WrapTuneMacOS.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/WrapTuneMacOS.App.Tests/WrapTuneMacOS.App.Tests.csproj" />
     <Project Path="tests/WrapTuneMacOS.Packaging.Tests/WrapTuneMacOS.Packaging.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,0 +1,53 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="WrapTuneMacOS.App"
+             RequestedThemeVariant="Light">
+
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+
+                <!-- Daylight (light) — ported from WrapTune/Themes/Daylight.xaml -->
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="WindowBg" Color="#F6F5F2"/>
+                    <SolidColorBrush x:Key="PanelBg" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="Panel2Bg" Color="#FAFAF8"/>
+                    <SolidColorBrush x:Key="LogBg" Color="#FBFBF8"/>
+                    <SolidColorBrush x:Key="BorderBrush" Color="#E6E3DC"/>
+                    <SolidColorBrush x:Key="BorderSoftBrush" Color="#EEECE7"/>
+                    <SolidColorBrush x:Key="Fg" Color="#1C1C1A"/>
+                    <SolidColorBrush x:Key="Dim" Color="#6B6A64"/>
+                    <SolidColorBrush x:Key="Dimmer" Color="#9A988F"/>
+                    <SolidColorBrush x:Key="Accent" Color="#2F5D50"/>
+                    <SolidColorBrush x:Key="AccentSoft" Color="#E8EFED"/>
+                    <SolidColorBrush x:Key="AccentOn" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="Success" Color="#2F8060"/>
+                    <SolidColorBrush x:Key="Error" Color="#B23A3A"/>
+                </ResourceDictionary>
+
+                <!-- Midnight (dark) — ported from WrapTune/Themes/Midnight.xaml -->
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="WindowBg" Color="#0F1822"/>
+                    <SolidColorBrush x:Key="PanelBg" Color="#172230"/>
+                    <SolidColorBrush x:Key="Panel2Bg" Color="#1D2A3A"/>
+                    <SolidColorBrush x:Key="LogBg" Color="#0A1118"/>
+                    <SolidColorBrush x:Key="BorderBrush" Color="#27384E"/>
+                    <SolidColorBrush x:Key="BorderSoftBrush" Color="#1F2D40"/>
+                    <SolidColorBrush x:Key="Fg" Color="#E7EEF6"/>
+                    <SolidColorBrush x:Key="Dim" Color="#8094AB"/>
+                    <SolidColorBrush x:Key="Dimmer" Color="#566A82"/>
+                    <SolidColorBrush x:Key="Accent" Color="#5EEAD4"/>
+                    <SolidColorBrush x:Key="AccentSoft" Color="#152C36"/>
+                    <SolidColorBrush x:Key="AccentOn" Color="#073B36"/>
+                    <SolidColorBrush x:Key="Success" Color="#52C7A0"/>
+                    <SolidColorBrush x:Key="Error" Color="#E06C60"/>
+                </ResourceDictionary>
+
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

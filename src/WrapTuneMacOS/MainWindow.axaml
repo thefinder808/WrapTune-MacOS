@@ -1,0 +1,186 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="WrapTuneMacOS.MainWindow"
+        Title="WrapTune MacOS"
+        Width="720" Height="600" MinWidth="640" MinHeight="540"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBg}"
+        FontFamily="Inter" FontSize="13">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.fieldLabel">
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+        </Style>
+        <Style Selector="TextBlock.fieldHint">
+            <Setter Property="Foreground" Value="{DynamicResource Dimmer}"/>
+            <Setter Property="FontFamily" Value="Menlo"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+        </Style>
+        <Style Selector="TextBox.path">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="FontFamily" Value="Menlo"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="10,0,8,0"/>
+            <Setter Property="Background" Value="{DynamicResource PanelBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource Accent}"/>
+        </Style>
+        <Style Selector="Button.browse">
+            <Setter Property="Width" Value="38"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Content" Value="…"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="{DynamicResource Panel2Bg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.primary">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="MinWidth" Value="100"/>
+            <Setter Property="Padding" Value="18,0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="{DynamicResource Accent}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentOn}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.secondary">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.toggle">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+
+        <!-- 0 · Header -->
+        <Grid Grid.Row="0" Margin="0,0,0,14" ColumnDefinitions="*,Auto">
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="New package" FontSize="20" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Fg}"/>
+                <TextBlock Margin="0,3,0,0" FontSize="12.5" Foreground="{DynamicResource Dim}">
+                    <Run Text="Wrap a Win32 installer into an "/>
+                    <Run FontFamily="Menlo" Foreground="{DynamicResource Accent}" Text=".intunewin"/>
+                    <Run Text=" package for Microsoft Intune."/>
+                </TextBlock>
+            </StackPanel>
+            <Button x:Name="BtnTheme" Grid.Column="1" Classes="toggle"
+                    Content="◐ Dark" Click="BtnTheme_Click" VerticalAlignment="Top"/>
+        </Grid>
+
+        <!-- 1 · Built-in engine pill (replaces WrapTune's exe-path row) -->
+        <Border Grid.Row="1" Margin="0,0,0,16"
+                Background="{DynamicResource AccentSoft}"
+                BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1"
+                CornerRadius="8" Padding="14,10">
+            <StackPanel Orientation="Horizontal">
+                <Ellipse Width="8" Height="8" Fill="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                <TextBlock Margin="10,0,0,0" VerticalAlignment="Center"
+                           FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Fg}"
+                           Text="Built-in .intunewin engine"/>
+                <TextBlock Margin="10,0,0,0" VerticalAlignment="Center"
+                           FontSize="11.5" Foreground="{DynamicResource Dim}"
+                           Text="— no external tool needed"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 2 · Form rows -->
+        <Grid Grid.Row="2" ColumnDefinitions="128,*,Auto" RowDefinitions="Auto,Auto,Auto">
+
+            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,14,10" VerticalAlignment="Center">
+                <TextBlock Classes="fieldLabel" Text="Source folder"/>
+                <TextBlock Classes="fieldHint" Text="-c"/>
+            </StackPanel>
+            <TextBox x:Name="TxtSourceFolder" Grid.Row="0" Grid.Column="1" Margin="0,0,0,10"
+                     Classes="path" DragDrop.AllowDrop="True"
+                     Watermark="Folder whose contents get packaged"/>
+            <Button x:Name="BtnBrowseSource" Grid.Row="0" Grid.Column="2" Margin="6,0,0,10"
+                    Classes="browse" Click="BtnBrowseSource_Click"/>
+
+            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,14,10" VerticalAlignment="Center">
+                <TextBlock Classes="fieldLabel" Text="Setup file"/>
+                <TextBlock Classes="fieldHint" Text="-s"/>
+            </StackPanel>
+            <TextBox x:Name="TxtSetupFile" Grid.Row="1" Grid.Column="1" Margin="0,0,0,10"
+                     Classes="path" DragDrop.AllowDrop="True"
+                     Watermark="The installer inside the source folder"/>
+            <Button x:Name="BtnBrowseSetup" Grid.Row="1" Grid.Column="2" Margin="6,0,0,10"
+                    Classes="browse" Click="BtnBrowseSetup_Click"/>
+
+            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                <TextBlock Classes="fieldLabel" Text="Output folder"/>
+                <TextBlock Classes="fieldHint" Text="-o"/>
+            </StackPanel>
+            <TextBox x:Name="TxtOutputFolder" Grid.Row="2" Grid.Column="1"
+                     Classes="path" DragDrop.AllowDrop="True"
+                     Watermark="Where the .intunewin is written"/>
+            <Button x:Name="BtnBrowseOutput" Grid.Row="2" Grid.Column="2" Margin="6,0,0,0"
+                    Classes="browse" Click="BtnBrowseOutput_Click"/>
+        </Grid>
+
+        <!-- 3 · Overwrite toggle -->
+        <CheckBox x:Name="ChkOverwrite" Grid.Row="3" Margin="142,14,0,16" IsChecked="True"
+                  Foreground="{DynamicResource Fg}" FontSize="12.5">
+            <TextBlock>
+                <Run Text="Overwrite existing output "/>
+                <Run FontFamily="Menlo" Foreground="{DynamicResource Dimmer}" FontSize="11" Text="-q"/>
+            </TextBlock>
+        </CheckBox>
+
+        <!-- 4 · Output log -->
+        <Border Grid.Row="4" Margin="0,0,0,14"
+                Background="{DynamicResource LogBg}"
+                BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1"
+                CornerRadius="8">
+            <TextBox x:Name="TxtOutput"
+                     Background="Transparent" BorderThickness="0"
+                     IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     FontFamily="Menlo" FontSize="11.5"
+                     Foreground="{DynamicResource Dim}" Padding="12"/>
+        </Border>
+
+        <!-- 5 · Footer -->
+        <Grid Grid.Row="5" ColumnDefinitions="*,Auto,Auto">
+            <TextBlock x:Name="TxtStatus" Grid.Column="0" Text="Ready"
+                       VerticalAlignment="Center" FontSize="11.5"
+                       Foreground="{DynamicResource Dimmer}"/>
+            <Button x:Name="BtnOpenOutput" Grid.Column="1" Margin="0,0,10,0"
+                    Classes="secondary" Content="Open output" IsVisible="False"
+                    Click="BtnOpenOutput_Click"/>
+            <Button x:Name="BtnPackage" Grid.Column="2" Classes="primary"
+                    Content="Package" Click="BtnPackage_Click"/>
+        </Grid>
+    </Grid>
+</Window>
