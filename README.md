@@ -1,41 +1,127 @@
 # WrapTune MacOS
 
-A macOS-native companion to [WrapTune](https://github.com/thefinder808/WrapTune)
-(the Windows app). WrapTune MacOS lets a **Mac-based Intune admin who manages
-Windows fleets** build `.intunewin` packages locally — no Windows VM required.
+Build Microsoft Intune **`.intunewin`** Win32 app packages natively on a Mac — no
+Windows VM, no Wine, no official tooling required.
 
-> The `.intunewin` packages this produces still deploy to **Windows** endpoints
-> via Intune. This app is about building them from a Mac, not changing what they
-> target.
+WrapTune MacOS is the macOS-native companion to
+[WrapTune](https://github.com/thefinder808/WrapTune) (the Windows app). It's for
+the **Mac-based admin who manages Windows fleets** and wants to wrap installers
+into `.intunewin` packages without leaving macOS.
 
-## Why this is a separate app, not a recompile
+> The packages this produces deploy to **Windows** endpoints through Intune. This
+> app builds them from a Mac — it doesn't change what they target.
+
+<!-- SCREENSHOT: main window (light theme). Suggested path: docs/images/main-window.png -->
+<!-- ![WrapTune MacOS main window](docs/images/main-window.png) -->
+
+## Why this exists
 
 Microsoft's official `IntuneWinAppUtil.exe` (the Win32 Content Prep Tool) is a
-closed-source **.NET Framework** Windows-only binary — it cannot run on macOS.
-WrapTune MacOS therefore ships its **own in-house implementation** of the
-documented `.intunewin` format (AES-256-CBC + HMAC-SHA256 + a `Detection.xml`
-metadata file), built with the .NET cryptography libraries only — no third-party
-dependency produces the encrypted package. The UI is rebuilt in
-[Avalonia](https://avaloniaui.net/) (the cross-platform analogue of WrapTune's WPF UI).
+closed-source, **.NET Framework**, **Windows-only** binary. It cannot run on
+macOS, so the usual Mac options are a Windows VM or skipping local packaging
+entirely.
 
-## Status
+WrapTune MacOS instead ships its **own clean-room implementation** of the
+documented `.intunewin` format. The package layout, encryption, and metadata are
+produced directly:
 
-🚧 Early development. See `CLAUDE.md` for architecture and the build plan.
+- **AES-256-CBC** payload encryption + **HMAC-SHA256** integrity, with a distinct
+  MAC key, using only the .NET base-class-library cryptography — **no third-party
+  dependency produces the encrypted artifact** (deliberate, for auditability and
+  supply-chain safety).
+- A hand-written **OLE2 / MSI Property-table reader** so MSI metadata
+  (product/upgrade/package codes, version, publisher, install context) is
+  extracted on macOS without any Windows Installer APIs.
+- A `Detection.xml` that matches the shape Intune's client expects.
 
-## Layout
+The result has been **deployed to a real Intune tenant and installed on Windows
+endpoints** (Zoom, Chrome Enterprise, PowerShell 7), with the official tool
+nowhere in the chain.
 
-```
-src/WrapTuneMacOS.Packaging   The .intunewin engine (no UI) — see CLAUDE.md
-src/WrapTuneMacOS             Avalonia desktop UI (forthcoming)
-tests/                        Engine validation (round-trip + golden-fixture)
-```
+## Features
 
-## Build & test (engine)
+- Wrap `.exe`, `.msi`, `.ps1`, `.cmd`, `.bat` installers into `.intunewin`.
+- Automatic **MSI metadata** extraction, including install context
+  (per-machine / per-user / dual-purpose) derived from the MSI's `ALLUSERS`
+  property — the value Intune uses for the app's install behavior.
+- Drag-and-drop for the source folder and setup file.
+- Light / dark theme.
+- Signed **and notarized** universal release (Apple Silicon + Intel).
+
+<!-- SCREENSHOT: dark theme and/or a completed package run with the output log. -->
+<!-- ![Packaging complete](docs/images/packaging-complete.png) -->
+
+## Install
+
+Download the latest signed, notarized `.dmg` for your Mac from the
+[**Releases**](https://github.com/thefinder808/WrapTune-MacOS/releases) page:
+
+- Apple Silicon → `WrapTuneMacOS-<version>-osx-arm64.dmg`
+- Intel → `WrapTuneMacOS-<version>-osx-x64.dmg`
+
+Open the `.dmg`, drag **WrapTune MacOS** to Applications, and launch. Because the
+build is notarized, Gatekeeper accepts it without the right-click-Open workaround.
+
+## Usage
+
+1. **Source folder** — the folder containing your installer and any supporting files.
+2. **Setup file** — the installer within that folder (`.exe`, `.msi`, `.ps1`, …).
+3. **Output folder** — where the `.intunewin` is written.
+4. Click **Package**, then upload the result in the Intune admin center as a
+   **Windows app (Win32)**.
+
+For `.msi` setup files, the package includes the MSI metadata Intune reads to
+pre-fill the product code (e.g. the uninstall command) and the install behavior.
+
+## How it differs from the Windows WrapTune
+
+The macOS window is intentionally simpler: there's **no "IntuneWinAppUtil.exe
+path"** field (the engine is built in) and **no Catalog folder** field (the
+official tool's `-a` Win10-S-mode catalog signing isn't reimplemented). Fields:
+Source folder, Setup file, Output folder, Overwrite, theme toggle, Package,
+output log.
+
+## Verifying a package
+
+`tools/verify-intunewin.py` is an **independent** verifier that re-derives every
+value Intune's client checks — container shape, `Detection.xml` fields, key
+sizes, blob layout, HMAC, AES decryption, digest, size, and that the payload zip
+contains the setup file — using code paths that share nothing with the engine
+(Python standard library + `openssl`). It exits non-zero on any failure.
 
 ```bash
+python3 tools/verify-intunewin.py path/to/package.intunewin
+```
+
+This proves format and cryptographic correctness. A real tenant upload remains
+the authoritative check for tenant-side rules.
+
+## Build from source
+
+Requires the **.NET 10 SDK**.
+
+```bash
+# Run the engine's test suite
 dotnet test
+
+# Build a local .app + .dmg (unsigned is fine for development)
+./build-macos.sh                 # Apple Silicon (osx-arm64)
+RID=osx-x64 ./build-macos.sh     # Intel
+```
+
+Releasing (signing + notarization) is tag-driven via GitHub Actions; see
+[`docs/RELEASE-SIGNING.md`](docs/RELEASE-SIGNING.md).
+
+## Project layout
+
+```
+src/WrapTuneMacOS.Packaging   The .intunewin engine (class library, no UI)
+src/WrapTuneMacOS             Avalonia desktop UI
+tests/                        Engine validation (round-trip, golden-fixture, MSI)
+tools/verify-intunewin.py     Independent package verifier
+build-macos.sh                publish → .app → sign → .dmg → notarize
 ```
 
 ## License
 
-MIT
+[MIT](LICENSE)

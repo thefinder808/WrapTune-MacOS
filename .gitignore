@@ -34,3 +34,10 @@ dist/
 *.cer
 *.mobileprovision
 AuthKey_*.p8
+
+# Editor / tool backups
+*.orig
+*.bak
+
+# Internal AI-context / build-log doc — not for the public repo
+CLAUDE.md
