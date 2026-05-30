@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Tests exercise the osslsigncode argument builder and process runner directly. -->
+    <InternalsVisibleTo Include="WrapTuneMacOS.Signing.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -80,9 +80,14 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
+        <Style Selector="TextBlock.signLabel">
+            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
     </Window.Styles>
 
-    <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+    <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
 
         <!-- 0 · Header -->
         <Grid Grid.Row="0" Margin="0,0,0,14" ColumnDefinitions="*,Auto">
@@ -158,8 +163,103 @@
             </TextBlock>
         </CheckBox>
 
-        <!-- 4 · Output log -->
-        <Border Grid.Row="4" Margin="0,0,0,14"
+        <!-- 4 · Code signing (optional) -->
+        <Expander x:Name="SignExpander" Grid.Row="4" Margin="0,0,0,14" IsExpanded="False"
+                  HorizontalAlignment="Stretch">
+            <Expander.Header>
+                <TextBlock Text="Code signing — optional" FontSize="12.5" FontWeight="Medium"
+                           Foreground="{DynamicResource Fg}"/>
+            </Expander.Header>
+            <StackPanel Spacing="10" Margin="0,8,0,4">
+                <CheckBox x:Name="ChkSignPayload" IsCheckedChanged="ChkSignPayload_IsCheckedChanged"
+                          Foreground="{DynamicResource Fg}" FontSize="12.5">
+                    <TextBlock Text="Authenticode-sign the payload before packaging"/>
+                </CheckBox>
+
+                <StackPanel x:Name="SigningFields" Spacing="10">
+                    <TextBlock TextWrapping="Wrap" FontSize="11.5" Foreground="{DynamicResource Dim}"
+                               Text="Signs files in place in the source folder via osslsigncode. Already-signed files are skipped. Requires:  brew install osslsigncode"/>
+
+                    <StackPanel Orientation="Horizontal" Spacing="18">
+                        <RadioButton x:Name="RbPfx" GroupName="certMode" IsChecked="True"
+                                     IsCheckedChanged="RbCertMode_IsCheckedChanged"
+                                     Content="PFX / .p12 file" Foreground="{DynamicResource Fg}" FontSize="12.5"/>
+                        <RadioButton x:Name="RbPkcs11" GroupName="certMode"
+                                     IsCheckedChanged="RbCertMode_IsCheckedChanged"
+                                     Content="PKCS#11 token / HSM" Foreground="{DynamicResource Fg}" FontSize="12.5"/>
+                    </StackPanel>
+
+                    <!-- PFX -->
+                    <Grid x:Name="PanelPfx" ColumnDefinitions="120,*,Auto">
+                        <TextBlock Grid.Column="0" Classes="signLabel" Text="Certificate"/>
+                        <TextBox x:Name="TxtPfxPath" Grid.Column="1" Classes="path"
+                                 Watermark="Path to .pfx / .p12"/>
+                        <Button x:Name="BtnBrowsePfx" Grid.Column="2" Margin="6,0,0,0"
+                                Classes="browse" Click="BtnBrowsePfx_Click"/>
+                    </Grid>
+
+                    <!-- PKCS#11 -->
+                    <StackPanel x:Name="PanelPkcs11" Spacing="8" IsVisible="False">
+                        <Grid ColumnDefinitions="120,*,Auto">
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Module"/>
+                            <TextBox x:Name="TxtPkcs11Module" Grid.Column="1" Classes="path"
+                                     Watermark="PKCS#11 module (.dylib / .so)"/>
+                            <Button x:Name="BtnBrowsePkcs11" Grid.Column="2" Margin="6,0,0,0"
+                                    Classes="browse" Click="BtnBrowsePkcs11_Click"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="120,*">
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Cert URI"/>
+                            <TextBox x:Name="TxtPkcs11Cert" Grid.Column="1" Classes="path"
+                                     Watermark="pkcs11:token=…;object=…  (optional)"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="120,*">
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Key URI"/>
+                            <TextBox x:Name="TxtKeyUri" Grid.Column="1" Classes="path"
+                                     Watermark="pkcs11:token=…;object=…"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <Grid ColumnDefinitions="120,*">
+                        <TextBlock Grid.Column="0" Classes="signLabel" Text="Password / PIN"/>
+                        <TextBox x:Name="TxtSecret" Grid.Column="1" Classes="path" PasswordChar="•"
+                                 Watermark="Not saved — entered each run"/>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="120,*">
+                        <TextBlock Grid.Column="0" Classes="signLabel" Text="Timestamp URL"/>
+                        <TextBox x:Name="TxtTimestampUrl" Grid.Column="1" Classes="path"
+                                 Watermark="RFC3161 timestamp server (blank to skip)"/>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="120,*">
+                        <TextBlock Grid.Column="0" Classes="signLabel" Text="Description"/>
+                        <TextBox x:Name="TxtSignDescription" Grid.Column="1" Classes="path"
+                                 Watermark="Signature description (optional)"/>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="120,*">
+                        <TextBlock Grid.Column="0" Classes="signLabel" Text="URL"/>
+                        <TextBox x:Name="TxtSignUrl" Grid.Column="1" Classes="path"
+                                 Watermark="Signature URL (optional)"/>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="120,*,Auto">
+                        <TextBlock Grid.Column="0" Classes="signLabel" Text="osslsigncode"/>
+                        <TextBox x:Name="TxtOsslPath" Grid.Column="1" Classes="path"
+                                 Watermark="Auto-detected (Homebrew) — override optional"/>
+                        <Button x:Name="BtnCheckSigner" Grid.Column="2" Margin="6,0,0,0"
+                                Classes="secondary" Content="Check" Click="BtnCheckSigner_Click"/>
+                    </Grid>
+
+                    <CheckBox x:Name="ChkSignAllFiles" Foreground="{DynamicResource Fg}" FontSize="12.5">
+                        <TextBlock Text="Also sign other signable files in the source folder"/>
+                    </CheckBox>
+                </StackPanel>
+            </StackPanel>
+        </Expander>
+
+        <!-- 5 · Output log -->
+        <Border Grid.Row="5" Margin="0,0,0,14"
                 Background="{DynamicResource LogBg}"
                 BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1"
                 CornerRadius="8">
@@ -171,8 +271,8 @@
                      Foreground="{DynamicResource Dim}" Padding="12"/>
         </Border>
 
-        <!-- 5 · Footer -->
-        <Grid Grid.Row="5" ColumnDefinitions="*,Auto,Auto">
+        <!-- 6 · Footer -->
+        <Grid Grid.Row="6" ColumnDefinitions="*,Auto,Auto">
             <TextBlock x:Name="TxtStatus" Grid.Column="0" Text="Ready"
                        VerticalAlignment="Center" FontSize="11.5"
                        Foreground="{DynamicResource Dimmer}"/>

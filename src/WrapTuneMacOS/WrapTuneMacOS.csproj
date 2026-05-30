@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\WrapTuneMacOS.Packaging\WrapTuneMacOS.Packaging.csproj" />
+    <ProjectReference Include="..\WrapTuneMacOS.Signing\WrapTuneMacOS.Signing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

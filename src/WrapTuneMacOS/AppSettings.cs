@@ -20,6 +20,25 @@ public sealed class AppSettings
     /// <summary>Persist the Overwrite checkbox across runs.</summary>
     public bool Overwrite { get; set; } = true;
 
+    // ── Code signing (optional). The PFX password / HSM PIN is NEVER persisted. ──
+
+    public bool SignPayload { get; set; }
+
+    /// <summary>"Pfx" (default) or "Pkcs11".</summary>
+    public string SignCertMode { get; set; } = "Pfx";
+
+    public string? SignPfxPath { get; set; }
+    public string? SignPkcs11ModulePath { get; set; }
+    public string? SignPkcs11CertUri { get; set; }
+    public string? SignKeyUri { get; set; }
+    public string? SignTimestampUrl { get; set; }
+    public string? SignDescription { get; set; }
+    public string? SignUrl { get; set; }
+    public bool SignAllFiles { get; set; }
+
+    /// <summary>Optional explicit path to osslsigncode; blank auto-detects.</summary>
+    public string? OsslsigncodePath { get; set; }
+
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public static string GetSettingsPath()
