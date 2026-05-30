@@ -41,3 +41,7 @@ AuthKey_*.p8
 
 # Internal AI-context / build-log doc — not for the public repo
 CLAUDE.md
+
+# Local agent/tooling scratch
+.claude/
+.remember/
