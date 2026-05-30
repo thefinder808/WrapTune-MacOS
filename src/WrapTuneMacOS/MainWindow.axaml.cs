@@ -52,7 +52,7 @@ public partial class MainWindow : Window
         TxtSignUrl.Text = s.SignUrl;
         TxtOsslPath.Text = s.OsslsigncodePath;
         ChkSignAllFiles.IsChecked = s.SignAllFiles;
-        SignExpander.IsExpanded = s.SignPayload;
+        SetSignExpanded(s.SignPayload);
     }
 
     private void SaveCurrentSettings() => new AppSettings
@@ -195,6 +195,14 @@ public partial class MainWindow : Window
             AppendOutput("Found signer: " + version);
             SetStatus("Signer ready.", "Success");
         }
+    }
+
+    private void BtnSignToggle_Click(object? sender, RoutedEventArgs e) => SetSignExpanded(!SignBody.IsVisible);
+
+    private void SetSignExpanded(bool expanded)
+    {
+        SignBody.IsVisible = expanded;
+        SignChevron.Text = expanded ? "⌃" : "⌄";
     }
 
     private void ChkSignPayload_IsCheckedChanged(object? sender, RoutedEventArgs e) => UpdateSigningUi();
