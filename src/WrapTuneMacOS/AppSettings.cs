@@ -11,6 +11,7 @@ namespace WrapTuneMacOS;
 public sealed class AppSettings
 {
     public string? SourceFolder { get; set; }
+    public string? SetupFile { get; set; }
     public string? OutputFolder { get; set; }
 
     /// <summary>"Daylight" (default) or "Midnight".</summary>

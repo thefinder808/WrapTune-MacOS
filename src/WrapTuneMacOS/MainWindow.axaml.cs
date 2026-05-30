@@ -29,6 +29,7 @@ public partial class MainWindow : Window
     {
         var s = AppSettings.Load();
         if (!string.IsNullOrEmpty(s.SourceFolder)) TxtSourceFolder.Text = s.SourceFolder;
+        if (!string.IsNullOrEmpty(s.SetupFile)) TxtSetupFile.Text = s.SetupFile;
         if (!string.IsNullOrEmpty(s.OutputFolder)) TxtOutputFolder.Text = s.OutputFolder;
         _theme = string.IsNullOrEmpty(s.Theme) ? "Daylight" : s.Theme;
         ChkOverwrite.IsChecked = s.Overwrite;
@@ -37,6 +38,7 @@ public partial class MainWindow : Window
     private void SaveCurrentSettings() => new AppSettings
     {
         SourceFolder = TxtSourceFolder.Text,
+        SetupFile = TxtSetupFile.Text,
         OutputFolder = TxtOutputFolder.Text,
         Theme = _theme,
         Overwrite = ChkOverwrite.IsChecked == true,

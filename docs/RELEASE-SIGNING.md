@@ -98,7 +98,7 @@ for notarization) it crashes at launch without these.
 ## Verifying a signed build
 
 ```bash
-codesign --verify --deep --strict --verbose=2 "dist/WrapTune MacOS.app"
+codesign --verify --deep --strict --verbose=2 "dist/WrapTune.app"
 spctl -a -vvv --type install "dist/WrapTuneMacOS-1.0.0-osx-arm64.dmg"
 xcrun stapler validate "dist/WrapTuneMacOS-1.0.0-osx-arm64.dmg"
 ```

@@ -11,8 +11,7 @@ into `.intunewin` packages without leaving macOS.
 > The packages this produces deploy to **Windows** endpoints through Intune. This
 > app builds them from a Mac — it doesn't change what they target.
 
-<!-- SCREENSHOT: main window (light theme). Suggested path: docs/images/main-window.png -->
-<!-- ![WrapTune MacOS main window](docs/images/main-window.png) -->
+![WrapTune building an .intunewin package](docs/images/hero.png)
 
 ## Why this exists
 
@@ -48,8 +47,7 @@ nowhere in the chain.
 - Light / dark theme.
 - Signed **and notarized** universal release (Apple Silicon + Intel).
 
-<!-- SCREENSHOT: dark theme and/or a completed package run with the output log. -->
-<!-- ![Packaging complete](docs/images/packaging-complete.png) -->
+![WrapTune in light theme](docs/images/light-mode.png)
 
 ## Install
 

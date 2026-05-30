@@ -21,9 +21,9 @@ RID="${RID:-osx-arm64}"
 CONFIG="${CONFIG:-Release}"
 VERSION="${VERSION:-1.0.0}"
 
-APP_NAME="WrapTune MacOS"
-EXE_NAME="WrapTuneMacOS"
-BUNDLE_ID="com.thefinder808.WrapTuneMacOS"
+APP_NAME="WrapTune"          # user-facing: .app bundle, DMG volume, CFBundleName/DisplayName, macOS menu
+EXE_NAME="WrapTuneMacOS"     # internal: executable + .icns + CFBundleExecutable (kept stable across the rename)
+BUNDLE_ID="com.thefinder808.WrapTuneMacOS"   # stable bundle identity — do not change
 
 PROJECT="$ROOT/src/WrapTuneMacOS/WrapTuneMacOS.csproj"
 ICNS="$ROOT/src/WrapTuneMacOS/WrapTuneMacOS.icns"
@@ -83,13 +83,64 @@ else
     echo "==> SIGN_IDENTITY unset — UNSIGNED build (skip codesign)"
 fi
 
-# ── DMG (hdiutil: reliable and headless-friendly) ──
+# ── DMG: styled drag-to-Applications layout ──
+# Build a read-write image, arrange it in Finder (window size + icon positions),
+# then convert to a compressed read-only DMG. The Finder step is best-effort:
+# a headless environment (CI without a window server) can't script Finder, so it
+# falls back to a functional — just unstyled — DMG. Either way we always unmount
+# and clean up the scratch image and staging dir.
 echo "==> Building $(basename "$DMG")"
 STAGE="$DIST/dmg-stage"
+MOUNT="/Volumes/$APP_NAME"
+RWDMG="$DIST/.rw-$RID.dmg"
+
+cleanup_dmg() {
+    hdiutil detach "$MOUNT" >/dev/null 2>&1 || true
+    rm -rf "$STAGE" "$RWDMG"
+}
+trap cleanup_dmg RETURN 2>/dev/null || true
+
 rm -rf "$STAGE"; mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
-hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+
+hdiutil detach "$MOUNT" >/dev/null 2>&1 || true
+rm -f "$RWDMG"
+hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDRW "$RWDMG" >/dev/null
+hdiutil attach "$RWDMG" -mountpoint "$MOUNT" >/dev/null
+
+# Arrange in Finder. Capture the exit code explicitly (set -e + an if/heredoc
+# combo is fragile), so the log message is accurate.
+layout_rc=0
+osascript >/dev/null 2>&1 <<OSA || layout_rc=$?
+tell application "Finder"
+  tell disk "$APP_NAME"
+    open
+    set current view of container window to icon view
+    set toolbar visible of container window to false
+    set statusbar visible of container window to false
+    set the bounds of container window to {200, 120, 800, 520}
+    set opts to the icon view options of container window
+    set arrangement of opts to not arranged
+    set icon size of opts to 112
+    set position of item "$APP_NAME.app" of container window to {150, 210}
+    set position of item "Applications" of container window to {450, 210}
+    update without registering applications
+    delay 1
+    close
+  end tell
+end tell
+OSA
+if [[ $layout_rc -eq 0 ]]; then
+    echo "    DMG layout applied"
+else
+    echo "    Finder layout unavailable (headless?) — shipping unstyled DMG"
+fi
+
+sync
+hdiutil detach "$MOUNT" >/dev/null 2>&1 || true
+hdiutil convert "$RWDMG" -format UDZO -o "$DMG" >/dev/null
+rm -f "$RWDMG"
 rm -rf "$STAGE"
 
 # ── Notarize + staple ──
