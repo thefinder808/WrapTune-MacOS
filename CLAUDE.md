@@ -45,6 +45,8 @@ src/WrapTuneMacOS.Packaging/             the engine — class library, NO UI
 src/WrapTuneMacOS/                       Avalonia desktop app (forthcoming, Phase 2)
 tests/WrapTuneMacOS.Packaging.Tests/     round-trip + golden-fixture + MSI tests
   Fixtures/                                tiny payload + known-good .intunewin + sample .msi
+tools/generate-icns.py                   builds the app .icns (shells to iconutil)
+tools/verify-intunewin.py                independent .intunewin verifier (stdlib + openssl)
 build-macos.sh                           publish → .app → sign → .dmg → notarize (Phase 3-4)
 .github/workflows/release.yml            macos-latest CI on v* tags (Phase 3-4)
 ```
@@ -81,6 +83,18 @@ Requires reading the MSI's `Property` table — an OLE2 Structured Storage
 (compound file). No Windows APIs on macOS, so we parse the compound-file format
 + MSI string-pool/columns by hand in `Msi/MsiPropertyReader.cs`.
 
+**Install context is derived, not assumed.** `MsiExecutionContext` /
+`MsiIsMachineInstall` / `MsiIsUserInstall` come from the MSI's `ALLUSERS`
+property (`ResolveInstallContext`): `ALLUSERS=1` → per-machine (context **0**),
+`ALLUSERS=2` → dual-purpose (context **2**, both machine+user true),
+empty/absent → per-user (context **1**). The integer encoding follows Microsoft
+Graph's `win32LobAppMsiPackageType` enum (perMachine=0, perUser=1,
+dualPurpose=2 — confirmed in MS Learn docs). We only emit fields we can ground
+from the Property table; the other `MsiInfo` booleans
+(`MsiRequiresReboot/Logon`, `MsiIncludesServices`, `MsiContainsSystem*`) stay at
+their `false` default until a golden MSI lets us calibrate them (don't guess —
+rule #6). Unit-tested in `MsiInstallContextTests` (no fixture needed).
+
 ## Differences from WrapTune's UI (when Phase 2 lands)
 
 The macOS window is **simpler**: no "IntuneWinAppUtil.exe path" row (engine is
@@ -100,7 +114,14 @@ macOS). Guard against the known empty-path .NET bug on some macOS releases.
    produced by the **official tool on Windows** for the same input (decrypt both,
    assert recovered inner ZIPs are byte-identical; diff Detection.xml). Fixture
    committed under `tests/.../Fixtures/` with the official tool version recorded.
-3. **Real tenant upload** — the authoritative gate, run manually per
+3. **Independent verifier** — `python3 tools/verify-intunewin.py <file>`. Re-derives
+   every value Intune's client checks (container shape, Detection.xml fields, key
+   sizes, blob layout, HMAC, AES decrypt, digest, size, payload-zip + SetupFile
+   present) using code paths that share **nothing** with our writer (Python stdlib
+   `hmac`/`hashlib`/`zipfile` + `openssl` for AES). Exits non-zero on any failure;
+   for `.msi` setup files it also checks `MsiInfo`/`MsiProductCode`. Proves
+   format/crypto correctness only — **not** tenant-side rules.
+4. **Real tenant upload** — the authoritative gate, run manually per
    format-affecting change.
 
 ## Build sequence (see ~/.claude/plans for the full plan)
@@ -114,8 +135,56 @@ macOS). Guard against the known empty-path .NET bug on some macOS releases.
 4. ✅ Signing + notarization WIRED (Hardened Runtime + `build/entitlements.plist`,
       codesign → notarytool → stapler); gated on `release`-env secrets, degrades
       to unsigned until added. Setup checklist: `docs/RELEASE-SIGNING.md`
-6. ⬜ Obsidian note cross-linking WrapTune; ✅ README/CLAUDE + signing docs;
-      ✅ private GitHub repo (github.com/thefinder808/WrapTuneMacOS)
+6. ✅ Obsidian note + README/CLAUDE + signing docs; private GitHub repo
+      (github.com/thefinder808/WrapTuneMacOS)
+
+## Status (2026-05-29)
+
+- **v0.1.1 shipped** — signed + notarized DMGs (arm64 + x64) on the Releases page;
+  Gatekeeper accepts the install. Signed with Developer ID `Nathaniel Graham (Q6LRJQSA42)`.
+- **CI signing fully wired** — all 6 `release`-env secrets set: Developer ID cert +
+  App Store Connect API key `G9325XG4R4`, issuer `f479e6f9-114d-4c2c-a3c0-bff4f21d61c1`.
+  `git tag v*` → signed + notarized release. (Apple creds also in the local keychain
+  for local `./build-macos.sh` signing.)
+- Two post-release fixes landed: codesign **`--deep`** for the flat .NET bundle (managed
+  dlls/pdbs live in `Contents/MacOS`), and trailing-slash tolerance in the source-folder check.
+- **Independent verifier built** (`tools/verify-intunewin.py`); first real `.intunewin` (a
+  PowerShell-script package) passes format/crypto verification end-to-end.
+- **First real MSI packaged + verified** (`WrapTune.msi`, 131 MB): the hand-rolled OLE2 reader
+  extracted all GUIDs correctly. Verifying it surfaced a latent bug — MSI install context was
+  hardcoded machine-only — now fixed to derive from `ALLUSERS` (branch
+  `fix/msi-execution-context`, not yet merged to main).
+
+## Next steps / follow-ups
+
+- [x] **Independent verifier — `tools/verify-intunewin.py` — BUILT (2026-05-29).** Runs the
+      full ladder (container → Detection.xml → key sizes → blob layout → HMAC → openssl AES
+      decrypt → digest/size → payload-zip + SetupFile → MsiInfo for `.msi`). Independent of the
+      engine (Python stdlib + `openssl`). Exits non-zero on any failure (CI-friendly). First
+      run on `Detect-WindowsPatchHealth.ps1` package: **PASS** (491,497 B payload, 242-entry
+      ZIP). Still only proves format/crypto, not tenant server-side rules.
+      Note: missing `<MsiInfo>` on an `.msi` is a **WARN** not a FAIL — it's optional for a
+      Win32-app upload and mirrors the engine, which only warns when its MSI reader can't
+      parse the file; an empty `<MsiProductCode>` inside a present `<MsiInfo>` is still a FAIL.
+- [x] **MSI install context now derived from `ALLUSERS` — FIXED (2026-05-29).** `MsiPropertyReader`
+      previously hardcoded `MsiExecutionContext=0` + `MsiIsMachineInstall=true` for every MSI
+      (and never set `MsiIsUserInstall`), so a per-user/dual-purpose MSI would have been mislabeled
+      machine-only. Now `ResolveInstallContext(ALLUSERS)` maps `1`→per-machine (0/M), `2`→dual
+      (2/M+U), empty|absent→per-user (1/U), per MS Learn `win32LobAppMsiPackageType`
+      (perMachine=0,perUser=1,dualPurpose=2). Verified by re-packaging the real `WrapTune.msi`
+      (ALLUSERS=1 → unchanged 0/machine — no regression) + 4 new `MsiInstallContextTests`; 23/23
+      green. The non-Graph `MsiInfo` booleans (`MsiRequiresReboot/Logon`, `MsiIncludesServices`,
+      `MsiContainsSystem*`) deliberately left at `false` — not derivable without a golden MSI;
+      don't guess (rule #6). On branch `fix/msi-execution-context`.
+- [ ] Commit a small golden `.intunewin` (from the official Windows tool) + a small `.msi`
+      under `tests/.../Fixtures/` so the differential + MSI tests run in CI (they self-skip now).
+- [ ] Authoritative validation: upload a Mac-built `.intunewin` to an Intune tenant.
+- [ ] Optional: migrate drag-drop to Avalonia 12 `DataTransfer` (one CS0618 warning today).
+- [ ] Decide if/when to make the repo public.
+
+> Session note (2026-05-29): work repeatedly stalled because Anthropic's Bash/Edit safety
+> classifier kept returning "temporarily unavailable" — retrying the same command generally
+> succeeded. Infra hiccup, not a code problem.
 
 ## Gotchas
 
