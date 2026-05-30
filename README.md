@@ -120,6 +120,11 @@ tools/verify-intunewin.py     Independent package verifier
 build-macos.sh                publish → .app → sign → .dmg → notarize
 ```
 
+## Support
+
+If WrapTune saves you from spinning up a Windows VM, you can
+[**buy me a coffee**](https://www.buymeacoffee.com/thefinder808). ☕
+
 ## License
 
 [MIT](LICENSE)
