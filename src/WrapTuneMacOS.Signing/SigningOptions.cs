@@ -3,11 +3,14 @@ namespace WrapTuneMacOS.Signing;
 /// <summary>Which kind of code-signing credential to use.</summary>
 public enum CertMode
 {
-    /// <summary>A PKCS#12 / <c>.pfx</c> file (self-signed, test, or legacy certs).</summary>
+    /// <summary>A PKCS#12 / <c>.pfx</c> file (self-signed, test, or legacy certs). Signed via osslsigncode.</summary>
     Pfx,
 
-    /// <summary>A PKCS#11 hardware token / HSM (modern public OV/EV certs).</summary>
+    /// <summary>A PKCS#11 hardware token / HSM (modern public OV/EV certs). Signed via osslsigncode.</summary>
     Pkcs11,
+
+    /// <summary>Azure Trusted Signing (cloud HSM, formerly Azure Code Signing). Signed via jsign.</summary>
+    TrustedSigning,
 }
 
 /// <summary>
@@ -33,6 +36,16 @@ public sealed record SigningOptions
     /// <summary>The private key's PKCS#11 URI (<c>-key</c>).</summary>
     public string? KeyUri { get; init; }
 
+    // ── Azure Trusted Signing mode (jsign) ─────────────────────────────────────
+    /// <summary>The Trusted Signing endpoint host, e.g. <c>weu.codesigning.azure.net</c> (jsign <c>--keystore</c>).</summary>
+    public string? TrustedSigningEndpoint { get; init; }
+
+    /// <summary>The Trusted Signing account name (first half of jsign <c>--alias</c>).</summary>
+    public string? TrustedSigningAccount { get; init; }
+
+    /// <summary>The certificate profile name (second half of jsign <c>--alias</c>).</summary>
+    public string? TrustedSigningProfile { get; init; }
+
     // ── Shared ─────────────────────────────────────────────────────────────────
     /// <summary>RFC3161 timestamp server URL (<c>-ts</c>). Empty/null skips timestamping.</summary>
     public string? TimestampUrl { get; init; }
@@ -50,9 +63,11 @@ public sealed record SigningOptions
     public string? OsslsigncodePath { get; init; }
 
     /// <summary>
-    /// The PFX password or HSM PIN. Transient — never persisted. Supplied via a
-    /// <c>0600</c> temp file (<c>-readpass</c>), never on the command line. May be
-    /// null for a PIN-less token.
+    /// The credential secret for the chosen mode: the PFX password, the HSM PIN, or
+    /// (for Trusted Signing) a manually-supplied Azure access token. Transient — never
+    /// persisted. For osslsigncode it's passed via a <c>0600</c> temp file
+    /// (<c>-readpass</c>); for jsign via a child-process env var (<c>--storepass env:</c>).
+    /// May be null (no PIN-less token; or auto-fetch the Azure token via the CLI).
     /// </summary>
     public string? Secret { get; init; }
 }

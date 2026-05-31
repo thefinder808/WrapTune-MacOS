@@ -45,7 +45,8 @@ nowhere in the chain.
   property — the value Intune uses for the app's install behavior.
 - Drag-and-drop for the source folder and setup file.
 - **Optional Authenticode code-signing** of the payload before wrapping — sign
-  your `.exe`/`.msi`/`.ps1` from the Mac via `osslsigncode` (PFX or PKCS#11/HSM).
+  your `.exe`/`.msi`/`.ps1` from the Mac with a local cert (PFX or PKCS#11/HSM, via
+  `osslsigncode`) or **Azure Trusted Signing** (via `jsign`).
   See [Signing the payload](#signing-the-payload-optional).
 - Light / dark theme.
 - Signed **and notarized** universal release (Apple Silicon + Intel).
@@ -82,28 +83,34 @@ block, WDAC/AppLocker "signed only" policies), WrapTune can sign the payload —
 your `.exe`/`.msi`/`.ps1` — **before** it's wrapped, in one pass.
 
 This is a clean-room-friendly add-on: signing runs entirely **outside** the
-`.intunewin` engine (which stays zero-dependency and pure-managed), by shelling
-out to the open-source [`osslsigncode`](https://github.com/mtrojnar/osslsigncode),
-the cross-platform equivalent of Windows `SignTool`.
+`.intunewin` engine (which stays zero-dependency and pure-managed), by shelling out
+to open-source signers — [`osslsigncode`](https://github.com/mtrojnar/osslsigncode)
+(the cross-platform equivalent of Windows `SignTool`) for local certificates, and
+[`jsign`](https://ebourg.github.io/jsign/) for Azure Trusted Signing.
 
-**Prerequisite** — install the signer once:
+**Prerequisite** — install the signer your cert needs (one-time):
 
 ```bash
-brew install osslsigncode
+brew install osslsigncode   # local certs: PFX / PKCS#11
+brew install jsign          # Azure Trusted Signing
 ```
 
 Then open the **Code signing — optional** section and enable signing:
 
 - **PFX / .p12** — point at a `.pfx` file and enter its password (for self-signed,
-  test, or legacy certificates).
+  test, or legacy certificates). *(osslsigncode)*
 - **PKCS#11 token / HSM** — point at the vendor's PKCS#11 module and supply the
   cert/key URIs and PIN (the form modern public OV/EV certificates take).
-- Optional **RFC3161 timestamp URL** so signatures stay valid after the cert
-  expires.
+  *(osslsigncode)*
+- **Azure Trusted Signing** — enter your endpoint, account, and certificate profile.
+  The short-lived access token is fetched automatically via the Azure CLI (`az login`),
+  or you can paste one. Timestamping is automatic. *(jsign)*
+- Optional **RFC3161 timestamp URL** (PFX/PKCS#11 modes) so signatures stay valid
+  after the cert expires.
 
-Notes: the password/PIN is **entered each run and never saved**; files are signed
-**in place** in the source folder; and files that already carry a signature are
-**skipped** (so vendor-signed installers are never clobbered). Plain `.cmd`/`.bat`
+Notes: the password/PIN/token is **entered each run and never saved**; files are
+signed **in place** in the source folder; and files that already carry a signature
+are **skipped** (so vendor-signed installers are never clobbered). Plain `.cmd`/`.bat`
 scripts can't be Authenticode-signed and are excluded. Full details:
 [`docs/PAYLOAD-SIGNING.md`](docs/PAYLOAD-SIGNING.md).
 

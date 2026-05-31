@@ -24,7 +24,7 @@ public sealed class AppSettings
 
     public bool SignPayload { get; set; }
 
-    /// <summary>"Pfx" (default) or "Pkcs11".</summary>
+    /// <summary>"Pfx" (default), "Pkcs11", or "TrustedSigning".</summary>
     public string SignCertMode { get; set; } = "Pfx";
 
     public string? SignPfxPath { get; set; }
@@ -35,6 +35,11 @@ public sealed class AppSettings
     public string? SignDescription { get; set; }
     public string? SignUrl { get; set; }
     public bool SignAllFiles { get; set; }
+
+    // Azure Trusted Signing (non-secret; the access token is never persisted).
+    public string? SignTsEndpoint { get; set; }
+    public string? SignTsAccount { get; set; }
+    public string? SignTsProfile { get; set; }
 
     /// <summary>Optional explicit path to osslsigncode; blank auto-detects.</summary>
     public string? OsslsigncodePath { get; set; }

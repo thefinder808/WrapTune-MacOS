@@ -12,7 +12,8 @@ namespace WrapTuneMacOS.Signing;
 internal static class ProcessRunner
 {
     public static async Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(
-        string fileName, IReadOnlyList<string> args, CancellationToken ct = default)
+        string fileName, IReadOnlyList<string> args, CancellationToken ct = default,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         var psi = new ProcessStartInfo
         {
@@ -23,6 +24,12 @@ internal static class ProcessRunner
             CreateNoWindow = true,
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
+
+        // Extra env vars apply only to this child process. Used to pass secrets
+        // (e.g. an Azure token via `--storepass env:VAR`) without exposing them in
+        // the argument list, which is visible to other local users via `ps`.
+        if (environment is not null)
+            foreach (var (k, v) in environment) psi.Environment[k] = v;
 
         using var proc = new Process { StartInfo = psi };
         var stdout = new StringBuilder();

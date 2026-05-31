@@ -39,14 +39,18 @@ public partial class MainWindow : Window
         _theme = string.IsNullOrEmpty(s.Theme) ? "Daylight" : s.Theme;
         ChkOverwrite.IsChecked = s.Overwrite;
 
-        // Signing settings (the password / PIN is never persisted).
+        // Signing settings (the password / PIN / token is never persisted).
         ChkSignPayload.IsChecked = s.SignPayload;
+        RbTrustedSigning.IsChecked = s.SignCertMode == nameof(CertMode.TrustedSigning);
         RbPkcs11.IsChecked = s.SignCertMode == nameof(CertMode.Pkcs11);
-        RbPfx.IsChecked = !RbPkcs11.IsChecked;
+        RbPfx.IsChecked = RbPkcs11.IsChecked != true && RbTrustedSigning.IsChecked != true;
         TxtPfxPath.Text = s.SignPfxPath;
         TxtPkcs11Module.Text = s.SignPkcs11ModulePath;
         TxtPkcs11Cert.Text = s.SignPkcs11CertUri;
         TxtKeyUri.Text = s.SignKeyUri;
+        TxtTsEndpoint.Text = s.SignTsEndpoint;
+        TxtTsAccount.Text = s.SignTsAccount;
+        TxtTsProfile.Text = s.SignTsProfile;
         TxtTimestampUrl.Text = string.IsNullOrEmpty(s.SignTimestampUrl) ? DefaultTimestampUrl : s.SignTimestampUrl;
         TxtSignDescription.Text = s.SignDescription;
         TxtSignUrl.Text = s.SignUrl;
@@ -64,17 +68,25 @@ public partial class MainWindow : Window
         Overwrite = ChkOverwrite.IsChecked == true,
 
         SignPayload = ChkSignPayload.IsChecked == true,
-        SignCertMode = (RbPkcs11.IsChecked == true ? CertMode.Pkcs11 : CertMode.Pfx).ToString(),
+        SignCertMode = CurrentCertMode().ToString(),
         SignPfxPath = TxtPfxPath.Text,
         SignPkcs11ModulePath = TxtPkcs11Module.Text,
         SignPkcs11CertUri = TxtPkcs11Cert.Text,
         SignKeyUri = TxtKeyUri.Text,
+        SignTsEndpoint = TxtTsEndpoint.Text,
+        SignTsAccount = TxtTsAccount.Text,
+        SignTsProfile = TxtTsProfile.Text,
         SignTimestampUrl = TxtTimestampUrl.Text,
         SignDescription = TxtSignDescription.Text,
         SignUrl = TxtSignUrl.Text,
         OsslsigncodePath = TxtOsslPath.Text,
         SignAllFiles = ChkSignAllFiles.IsChecked == true,
     }.Save();
+
+    private CertMode CurrentCertMode() =>
+        RbTrustedSigning.IsChecked == true ? CertMode.TrustedSigning
+        : RbPkcs11.IsChecked == true ? CertMode.Pkcs11
+        : CertMode.Pfx;
 
     // ── Theme ─────────────────────────────────────────────────────────────--
 
@@ -210,27 +222,46 @@ public partial class MainWindow : Window
 
     private void UpdateSigningUi()
     {
-        var on = ChkSignPayload.IsChecked == true;
-        SigningFields.IsEnabled = on;
-        var pkcs11 = RbPkcs11.IsChecked == true;
-        PanelPfx.IsVisible = !pkcs11;
-        PanelPkcs11.IsVisible = pkcs11;
+        SigningFields.IsEnabled = ChkSignPayload.IsChecked == true;
+        var mode = CurrentCertMode();
+        var ts = mode == CertMode.TrustedSigning;
+        PanelPfx.IsVisible = mode == CertMode.Pfx;
+        PanelPkcs11.IsVisible = mode == CertMode.Pkcs11;
+        PanelTrustedSigning.IsVisible = ts;
+        // Trusted Signing carries its token in its own panel and auto-timestamps,
+        // so the shared Password/PIN and Timestamp rows don't apply.
+        RowSecret.IsVisible = !ts;
+        RowTimestamp.IsVisible = !ts;
     }
 
-    private SigningOptions BuildSigningOptions() => new()
+    private SigningOptions BuildSigningOptions()
     {
-        CertMode = RbPkcs11.IsChecked == true ? CertMode.Pkcs11 : CertMode.Pfx,
-        PfxPath = NullIfBlank(TxtPfxPath.Text),
-        Pkcs11ModulePath = NullIfBlank(TxtPkcs11Module.Text),
-        Pkcs11CertUri = NullIfBlank(TxtPkcs11Cert.Text),
-        KeyUri = NullIfBlank(TxtKeyUri.Text),
-        TimestampUrl = NullIfBlank(TxtTimestampUrl.Text),
-        Description = NullIfBlank(TxtSignDescription.Text),
-        Url = NullIfBlank(TxtSignUrl.Text),
-        SignAllSignableFiles = ChkSignAllFiles.IsChecked == true,
-        OsslsigncodePath = NullIfBlank(TxtOsslPath.Text),
-        Secret = string.IsNullOrEmpty(TxtSecret.Text) ? null : TxtSecret.Text,   // not trimmed; never persisted
-    };
+        var mode = CurrentCertMode();
+        // The token field lives in the Trusted Signing panel; the Password/PIN field
+        // serves the other modes. Both are transient and never persisted.
+        var secret = mode == CertMode.TrustedSigning
+            ? NullIfEmpty(TxtTsToken.Text)
+            : NullIfEmpty(TxtSecret.Text);   // not trimmed — passwords may have spaces
+        return new SigningOptions
+        {
+            CertMode = mode,
+            PfxPath = NullIfBlank(TxtPfxPath.Text),
+            Pkcs11ModulePath = NullIfBlank(TxtPkcs11Module.Text),
+            Pkcs11CertUri = NullIfBlank(TxtPkcs11Cert.Text),
+            KeyUri = NullIfBlank(TxtKeyUri.Text),
+            TrustedSigningEndpoint = NullIfBlank(TxtTsEndpoint.Text),
+            TrustedSigningAccount = NullIfBlank(TxtTsAccount.Text),
+            TrustedSigningProfile = NullIfBlank(TxtTsProfile.Text),
+            TimestampUrl = NullIfBlank(TxtTimestampUrl.Text),
+            Description = NullIfBlank(TxtSignDescription.Text),
+            Url = NullIfBlank(TxtSignUrl.Text),
+            SignAllSignableFiles = ChkSignAllFiles.IsChecked == true,
+            OsslsigncodePath = NullIfBlank(TxtOsslPath.Text),
+            Secret = secret,
+        };
+    }
+
+    private static string? NullIfEmpty(string? s) => string.IsNullOrEmpty(s) ? null : s;
 
     private static string? NullIfBlank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s;
 
@@ -251,22 +282,38 @@ public partial class MainWindow : Window
     {
         if (ChkSignPayload.IsChecked != true) return null;
 
-        if (SignerLocator.Locate(NullIfBlank(TxtOsslPath.Text)) is null)
-            return SignerLocator.InstallHint;
-
-        if (RbPkcs11.IsChecked == true)
+        if (RbTrustedSigning.IsChecked == true)
         {
-            if (string.IsNullOrWhiteSpace(TxtPkcs11Module.Text) || !File.Exists(TxtPkcs11Module.Text))
-                return "PKCS#11 module path is missing or does not exist.";
-            if (string.IsNullOrWhiteSpace(TxtKeyUri.Text))
-                return "PKCS#11 key URI is required.";
+            if (SignerLocator.LocateJsign() is null)
+                return SignerLocator.JsignInstallHint;
+            if (string.IsNullOrWhiteSpace(TxtTsEndpoint.Text))
+                return "Azure Trusted Signing endpoint is required.";
+            if (string.IsNullOrWhiteSpace(TxtTsAccount.Text))
+                return "Azure Trusted Signing account is required.";
+            if (string.IsNullOrWhiteSpace(TxtTsProfile.Text))
+                return "Azure Trusted Signing certificate profile is required.";
+            if (string.IsNullOrEmpty(TxtTsToken.Text) && SignerLocator.LocateAzureCli() is null)
+                return SignerLocator.AzureCliHint;
         }
         else
         {
-            if (string.IsNullOrWhiteSpace(TxtPfxPath.Text) || !File.Exists(TxtPfxPath.Text))
-                return "Signing certificate (.pfx) is missing or does not exist.";
-            if (string.IsNullOrEmpty(TxtSecret.Text))
-                return "The certificate password is required to sign.";
+            if (SignerLocator.Locate(NullIfBlank(TxtOsslPath.Text)) is null)
+                return SignerLocator.InstallHint;
+
+            if (RbPkcs11.IsChecked == true)
+            {
+                if (string.IsNullOrWhiteSpace(TxtPkcs11Module.Text) || !File.Exists(TxtPkcs11Module.Text))
+                    return "PKCS#11 module path is missing or does not exist.";
+                if (string.IsNullOrWhiteSpace(TxtKeyUri.Text))
+                    return "PKCS#11 key URI is required.";
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(TxtPfxPath.Text) || !File.Exists(TxtPfxPath.Text))
+                    return "Signing certificate (.pfx) is missing or does not exist.";
+                if (string.IsNullOrEmpty(TxtSecret.Text))
+                    return "The certificate password is required to sign.";
+            }
         }
 
         if (ChkSignAllFiles.IsChecked != true && !SignableExtensions.IsSignable(TxtSetupFile.Text!))

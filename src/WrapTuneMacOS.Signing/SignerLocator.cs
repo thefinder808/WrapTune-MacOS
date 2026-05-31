@@ -1,40 +1,57 @@
 namespace WrapTuneMacOS.Signing;
 
 /// <summary>
-/// Locates the user-installed <c>osslsigncode</c> binary. WrapTune deliberately
-/// does NOT bundle it — that keeps the notarized app dependency-clean (no bundled
-/// native crypto / OpenSSL, no CVE-patching burden) and lets the signer stay
-/// independently auditable. The user installs it once via Homebrew.
+/// Locates the user-installed signing tools — <c>osslsigncode</c> (local PFX/PKCS#11
+/// certs + signature verification), <c>jsign</c> (Azure Trusted Signing), and the
+/// Azure CLI (<c>az</c>, for fetching Trusted Signing tokens). WrapTune deliberately
+/// does NOT bundle any of these — that keeps the notarized app dependency-clean (no
+/// bundled native crypto / JVM, no CVE-patching burden) and lets the signers stay
+/// independently auditable. The user installs them via Homebrew as needed.
 /// </summary>
 public static class SignerLocator
 {
-    /// <summary>Actionable message shown when the binary can't be found.</summary>
+    /// <summary>Actionable message shown when osslsigncode can't be found.</summary>
     public const string InstallHint =
         "osslsigncode was not found. Install it with:  brew install osslsigncode";
 
-    /// <summary>Common Homebrew locations: Apple-silicon first, then Intel.</summary>
-    private static readonly string[] CommonPaths =
-    [
-        "/opt/homebrew/bin/osslsigncode",
-        "/usr/local/bin/osslsigncode",
-    ];
+    /// <summary>Actionable message shown when jsign can't be found.</summary>
+    public const string JsignInstallHint =
+        "jsign was not found. Install it with:  brew install jsign";
+
+    /// <summary>Actionable message shown when no Azure token source is available.</summary>
+    public const string AzureCliHint =
+        "Azure CLI not found or not logged in — run `az login`, or paste an access token.";
+
+    /// <summary>Common Homebrew bin directories: Apple-silicon first, then Intel.</summary>
+    private static readonly string[] BinDirs = ["/opt/homebrew/bin", "/usr/local/bin"];
 
     /// <summary>
     /// Resolve the osslsigncode path. Order: explicit <paramref name="overridePath"/>
     /// → known Homebrew locations → <c>PATH</c>. Returns null if none exists.
     /// </summary>
-    public static string? Locate(string? overridePath = null)
+    public static string? Locate(string? overridePath = null) => LocateBinary("osslsigncode", overridePath);
+
+    /// <summary>Resolve the jsign path (Homebrew / PATH), honoring an optional override.</summary>
+    public static string? LocateJsign(string? overridePath = null) => LocateBinary("jsign", overridePath);
+
+    /// <summary>Resolve the Azure CLI (<c>az</c>) path.</summary>
+    public static string? LocateAzureCli() => LocateBinary("az", null);
+
+    private static string? LocateBinary(string name, string? overridePath)
     {
         if (!string.IsNullOrWhiteSpace(overridePath) && File.Exists(overridePath))
             return overridePath;
 
-        foreach (var p in CommonPaths)
-            if (File.Exists(p)) return p;
+        foreach (var dir in BinDirs)
+        {
+            var candidate = Path.Combine(dir, name);
+            if (File.Exists(candidate)) return candidate;
+        }
 
-        return FindOnPath();
+        return FindOnPath(name);
     }
 
-    private static string? FindOnPath()
+    private static string? FindOnPath(string name)
     {
         var pathVar = Environment.GetEnvironmentVariable("PATH");
         if (string.IsNullOrEmpty(pathVar)) return null;
@@ -42,7 +59,7 @@ public static class SignerLocator
         foreach (var dir in pathVar.Split(Path.PathSeparator))
         {
             if (string.IsNullOrWhiteSpace(dir)) continue;
-            var candidate = Path.Combine(dir, "osslsigncode");
+            var candidate = Path.Combine(dir, name);
             if (File.Exists(candidate)) return candidate;
         }
         return null;

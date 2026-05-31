@@ -21,34 +21,49 @@ The `.intunewin` engine (`WrapTuneMacOS.Packaging`) is deliberately clean-room:
 pure managed code, zero third-party dependencies, and **no external-process
 calls**, so the encrypted artifact stays auditable. Signing would break that, so
 it lives entirely outside the engine in `WrapTuneMacOS.Signing`, which shells out
-to the open-source [`osslsigncode`](https://github.com/mtrojnar/osslsigncode) —
-the cross-platform equivalent of Windows `SignTool`. The app signs the payload
-first, then hands the unchanged engine the folder to wrap.
+to open-source signers: [`osslsigncode`](https://github.com/mtrojnar/osslsigncode)
+(the cross-platform equivalent of Windows `SignTool`) for local certificates, and
+[`jsign`](https://ebourg.github.io/jsign/) for Azure Trusted Signing. The app signs
+the payload first, then hands the unchanged engine the folder to wrap.
 
 ## Prerequisite
 
-WrapTune does **not** bundle the signer (that keeps the notarized app
-dependency-clean — no bundled OpenSSL, no CVE-patching burden). Install it once:
+WrapTune does **not** bundle the signers (that keeps the notarized app
+dependency-clean — no bundled OpenSSL/JVM, no CVE-patching burden). Install the one
+your certificate needs:
 
 ```bash
-brew install osslsigncode
+brew install osslsigncode   # local certs (PFX / PKCS#11)
+brew install jsign          # Azure Trusted Signing
 ```
 
-WrapTune auto-detects it at `/opt/homebrew/bin` or `/usr/local/bin`, or on your
-`PATH`. You can also set an explicit path in the **osslsigncode** field, and use
-**Check** to confirm the signer is found.
+WrapTune auto-detects them at `/opt/homebrew/bin` or `/usr/local/bin`, or on your
+`PATH`. For osslsigncode you can also set an explicit path in the **osslsigncode**
+field and use **Check** to confirm it's found.
 
 ## Certificate options
 
 You need a **Windows code-signing certificate** (this is separate from your Apple
 Developer ID).
 
-| Mode | Use it for | Inputs |
-|------|-----------|--------|
-| **PFX / .p12** | Self-signed, test, or legacy certs | `.pfx` path + password |
-| **PKCS#11 / HSM** | Modern public OV/EV certs (token-backed since 2023) | PKCS#11 module path, cert URI, key URI, PIN |
+| Mode | Use it for | Inputs | Signer |
+|------|-----------|--------|--------|
+| **PFX / .p12** | Self-signed, test, or legacy certs | `.pfx` path + password | osslsigncode |
+| **PKCS#11 / HSM** | Modern public OV/EV certs (token-backed since 2023) | PKCS#11 module path, cert URI, key URI, PIN | osslsigncode |
+| **Azure Trusted Signing** | Cloud HSM certs (Azure Artifact Signing) | endpoint, account, cert profile, access token | jsign |
 
 PKCS#11 URIs look like `pkcs11:token=<token>;object=<label>`.
+
+### Azure Trusted Signing specifics
+
+- **Endpoint** is the regional host, e.g. `weu.codesigning.azure.net`; **account**
+  and **cert profile** combine into jsign's `<account>/<profile>` alias.
+- **Token:** Trusted Signing tokens are short-lived (~1 hour). Leave the token field
+  **blank** to auto-fetch one at sign time via the Azure CLI
+  (`az account get-access-token --resource https://codesigning.azure.net`) — so make
+  sure you've run `az login`. Or paste a token manually (still transient, never saved).
+- **Timestamping is automatic** for Trusted Signing (its certs live only ~3 days), so
+  the Timestamp URL field is hidden in this mode.
 
 ## Behavior
 
@@ -70,12 +85,15 @@ PKCS#11 URIs look like `pkcs11:token=<token>;object=<label>`.
 
 ## Security
 
-- The **password / PIN is never persisted.** It's entered each run, held only in
-  memory, and passed to `osslsigncode` via a `0600` temp file (`-readpass`) that
-  is deleted immediately after — never on the command line (which would be visible
-  to other local users via `ps`).
-- All other signing settings (paths, URIs, timestamp URL) are saved to
-  `settings.json`; the secret is not.
+- The **password / PIN / token is never persisted.** It's entered (or fetched) each
+  run and held only in memory. It is never placed on a command line (which would be
+  visible to other local users via `ps`):
+  - osslsigncode (PFX/PKCS#11): passed via a `0600` temp file (`-readpass`) deleted
+    immediately after signing.
+  - jsign (Trusted Signing): passed via a child-process **environment variable**
+    (`--storepass env:WT_TS_TOKEN`) — not in argv, not on disk.
+- All other signing settings (paths, URIs, endpoint/account/profile) are saved to
+  `settings.json`; the secret/token is not.
 - Signing exec's a separate process and needs no extra Hardened Runtime
   entitlements.
 

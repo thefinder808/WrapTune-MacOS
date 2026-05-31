@@ -25,4 +25,24 @@ public sealed class SignerLocatorTests
     {
         Assert.Contains("brew install osslsigncode", SignerLocator.InstallHint);
     }
+
+    [Fact]
+    public void Jsign_override_path_is_honored_when_it_exists()
+    {
+        var existing = "/bin/sh";
+        if (!File.Exists(existing)) return;   // non-Unix CI — skip.
+        Assert.Equal(existing, SignerLocator.LocateJsign(existing));
+    }
+
+    [Fact]
+    public void Jsign_install_hint_names_the_homebrew_formula()
+    {
+        Assert.Contains("brew install jsign", SignerLocator.JsignInstallHint);
+    }
+
+    [Fact]
+    public void Azure_cli_hint_mentions_az_login()
+    {
+        Assert.Contains("az login", SignerLocator.AzureCliHint);
+    }
 }

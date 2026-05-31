@@ -216,7 +216,7 @@
 
                 <StackPanel x:Name="SigningFields" Spacing="10">
                     <TextBlock TextWrapping="Wrap" FontSize="11.5" Foreground="{DynamicResource Dim}"
-                               Text="Signs files in place in the source folder via osslsigncode. Already-signed files are skipped. Requires:  brew install osslsigncode"/>
+                               Text="Signs files in place; already-signed files are skipped. Local certs need osslsigncode (brew install osslsigncode); Azure Trusted Signing needs jsign (brew install jsign)."/>
 
                     <StackPanel Orientation="Horizontal" Spacing="18">
                         <RadioButton x:Name="RbPfx" GroupName="certMode" IsChecked="True"
@@ -225,6 +225,9 @@
                         <RadioButton x:Name="RbPkcs11" GroupName="certMode"
                                      IsCheckedChanged="RbCertMode_IsCheckedChanged"
                                      Content="PKCS#11 token / HSM" Foreground="{DynamicResource Fg}" FontSize="12.5"/>
+                        <RadioButton x:Name="RbTrustedSigning" GroupName="certMode"
+                                     IsCheckedChanged="RbCertMode_IsCheckedChanged"
+                                     Content="Azure Trusted Signing" Foreground="{DynamicResource Fg}" FontSize="12.5"/>
                     </StackPanel>
 
                     <!-- PFX -->
@@ -257,13 +260,37 @@
                         </Grid>
                     </StackPanel>
 
-                    <Grid ColumnDefinitions="120,*">
+                    <!-- Azure Trusted Signing (jsign) -->
+                    <StackPanel x:Name="PanelTrustedSigning" Spacing="8" IsVisible="False">
+                        <Grid ColumnDefinitions="120,*">
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Endpoint"/>
+                            <TextBox x:Name="TxtTsEndpoint" Grid.Column="1" Classes="path"
+                                     Watermark="e.g. weu.codesigning.azure.net"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="120,*">
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Account"/>
+                            <TextBox x:Name="TxtTsAccount" Grid.Column="1" Classes="path"
+                                     Watermark="Trusted Signing account name"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="120,*">
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Cert profile"/>
+                            <TextBox x:Name="TxtTsProfile" Grid.Column="1" Classes="path"
+                                     Watermark="Certificate profile name"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="120,*">
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Access token"/>
+                            <TextBox x:Name="TxtTsToken" Grid.Column="1" Classes="path" PasswordChar="•"
+                                     Watermark="Blank = auto-fetch via Azure CLI (az login)"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <Grid x:Name="RowSecret" ColumnDefinitions="120,*">
                         <TextBlock Grid.Column="0" Classes="signLabel" Text="Password / PIN"/>
                         <TextBox x:Name="TxtSecret" Grid.Column="1" Classes="path" PasswordChar="•"
                                  Watermark="Not saved — entered each run"/>
                     </Grid>
 
-                    <Grid ColumnDefinitions="120,*">
+                    <Grid x:Name="RowTimestamp" ColumnDefinitions="120,*">
                         <TextBlock Grid.Column="0" Classes="signLabel" Text="Timestamp URL"/>
                         <TextBox x:Name="TxtTimestampUrl" Grid.Column="1" Classes="path"
                                  Watermark="RFC3161 timestamp server (blank to skip)"/>
