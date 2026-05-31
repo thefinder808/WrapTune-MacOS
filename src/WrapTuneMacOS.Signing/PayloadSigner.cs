@@ -293,7 +293,7 @@ public sealed class PayloadSigner
         var args = new List<string>
         {
             "--storetype", "TRUSTEDSIGNING",
-            "--keystore", o.TrustedSigningEndpoint ?? "",
+            "--keystore", NormalizeEndpoint(o.TrustedSigningEndpoint),
             "--alias", $"{o.TrustedSigningAccount}/{o.TrustedSigningProfile}",
             "--storepass", "env:" + TokenEnvVar,
         };
@@ -311,6 +311,20 @@ public sealed class PayloadSigner
 
         args.Add(file);   // jsign signs the file in place
         return args;
+    }
+
+    /// <summary>
+    /// jsign's <c>--keystore</c> for Trusted Signing wants the bare host (e.g.
+    /// <c>eus.codesigning.azure.net</c>) — it appends the REST path itself. Strip any
+    /// scheme and trailing slash so a portal "Account URI" (<c>https://…/</c>) pasted
+    /// verbatim doesn't produce a double-slash 404.
+    /// </summary>
+    private static string NormalizeEndpoint(string? endpoint)
+    {
+        var e = (endpoint ?? "").Trim();
+        if (e.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) e = e["https://".Length..];
+        else if (e.StartsWith("http://", StringComparison.OrdinalIgnoreCase)) e = e["http://".Length..];
+        return e.TrimEnd('/');
     }
 
     /// <summary>

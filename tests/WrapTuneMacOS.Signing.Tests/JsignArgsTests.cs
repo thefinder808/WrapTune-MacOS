@@ -43,6 +43,17 @@ public sealed class JsignArgsTests
         Assert.DoesNotContain("super-secret-token", args);
     }
 
+    [Theory]
+    [InlineData("eus.codesigning.azure.net")]
+    [InlineData("https://eus.codesigning.azure.net")]
+    [InlineData("https://eus.codesigning.azure.net/")]   // verbatim portal "Account URI"
+    [InlineData("  HTTPS://eus.codesigning.azure.net/  ")]
+    public void Endpoint_is_normalized_to_bare_host(string entered)
+    {
+        var args = PayloadSigner.BuildJsignArgs("/x.exe", TrustedSigningOptions() with { TrustedSigningEndpoint = entered });
+        Assert.Equal("eus.codesigning.azure.net", ValueAfter(args, "--keystore"));
+    }
+
     [Fact]
     public void No_explicit_timestamp_flag_jsign_auto_timestamps()
     {
