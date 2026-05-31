@@ -171,7 +171,16 @@ public sealed class PayloadSigner
         var args = BuildJsignArgs(file, options);
         var env = new Dictionary<string, string> { [TokenEnvVar] = token };
         var (exit, stdout, stderr) = await ProcessRunner.RunAsync(_jsign!, args, ct, env);
-        return exit == 0 ? null : SummarizeJsign(stderr, stdout);
+        if (exit == 0) return null;
+
+        var message = SummarizeJsign(stderr, stdout);
+        // A 403 here means the token authenticated but the identity isn't authorized —
+        // almost always the missing signer role. Point the user straight at it.
+        if (message.Contains("403", StringComparison.Ordinal) ||
+            message.Contains("Forbidden", StringComparison.OrdinalIgnoreCase))
+            message += "  →  Your Azure identity likely needs the \"Artifact Signing Certificate Profile Signer\" " +
+                       "role on the account (role assignments can take a few minutes to propagate).";
+        return message;
     }
 
     /// <summary>

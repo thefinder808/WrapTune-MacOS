@@ -46,7 +46,7 @@ nowhere in the chain.
 - Drag-and-drop for the source folder and setup file.
 - **Optional Authenticode code-signing** of the payload before wrapping — sign
   your `.exe`/`.msi`/`.ps1` from the Mac with a local cert (PFX or PKCS#11/HSM, via
-  `osslsigncode`) or **Azure Trusted Signing** (via `jsign`).
+  `osslsigncode`) or **Azure Artifact Signing** — formerly Trusted Signing — (via `jsign`).
   See [Signing the payload](#signing-the-payload-optional).
 - Light / dark theme.
 - Signed **and notarized** universal release (Apple Silicon + Intel).
@@ -86,13 +86,13 @@ This is a clean-room-friendly add-on: signing runs entirely **outside** the
 `.intunewin` engine (which stays zero-dependency and pure-managed), by shelling out
 to open-source signers — [`osslsigncode`](https://github.com/mtrojnar/osslsigncode)
 (the cross-platform equivalent of Windows `SignTool`) for local certificates, and
-[`jsign`](https://ebourg.github.io/jsign/) for Azure Trusted Signing.
+[`jsign`](https://ebourg.github.io/jsign/) for Azure Artifact Signing.
 
 **Prerequisite** — install the signer your cert needs (one-time):
 
 ```bash
 brew install osslsigncode   # local certs: PFX / PKCS#11
-brew install jsign          # Azure Trusted Signing
+brew install jsign          # Azure Artifact Signing
 ```
 
 Then open the **Code signing — optional** section and enable signing:
@@ -102,9 +102,11 @@ Then open the **Code signing — optional** section and enable signing:
 - **PKCS#11 token / HSM** — point at the vendor's PKCS#11 module and supply the
   cert/key URIs and PIN (the form modern public OV/EV certificates take).
   *(osslsigncode)*
-- **Azure Trusted Signing** — enter your endpoint, account, and certificate profile.
-  The short-lived access token is fetched automatically via the Azure CLI (`az login`),
-  or you can paste one. Timestamping is automatic. *(jsign)*
+- **Azure Artifact Signing** (formerly Trusted Signing) — enter your endpoint, account,
+  and certificate profile. The short-lived access token is fetched automatically via the
+  Azure CLI (`az login`), or you can paste one. Timestamping is automatic. Your Azure
+  identity needs the **"Artifact Signing Certificate Profile Signer"** role on the account,
+  or signing returns 403. *(jsign)*
 - Optional **RFC3161 timestamp URL** (PFX/PKCS#11 modes) so signatures stay valid
   after the cert expires.
 

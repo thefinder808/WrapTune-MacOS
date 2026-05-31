@@ -216,7 +216,7 @@
 
                 <StackPanel x:Name="SigningFields" Spacing="10">
                     <TextBlock TextWrapping="Wrap" FontSize="11.5" Foreground="{DynamicResource Dim}"
-                               Text="Signs files in place; already-signed files are skipped. Local certs need osslsigncode (brew install osslsigncode); Azure Trusted Signing needs jsign (brew install jsign)."/>
+                               Text="Signs files in place; already-signed files are skipped. Local certs need osslsigncode (brew install osslsigncode); Azure Artifact Signing needs jsign (brew install jsign)."/>
 
                     <StackPanel Orientation="Horizontal" Spacing="18">
                         <RadioButton x:Name="RbPfx" GroupName="certMode" IsChecked="True"
@@ -227,7 +227,8 @@
                                      Content="PKCS#11 token / HSM" Foreground="{DynamicResource Fg}" FontSize="12.5"/>
                         <RadioButton x:Name="RbTrustedSigning" GroupName="certMode"
                                      IsCheckedChanged="RbCertMode_IsCheckedChanged"
-                                     Content="Azure Trusted Signing" Foreground="{DynamicResource Fg}" FontSize="12.5"/>
+                                     Content="Azure Artifact Signing" Foreground="{DynamicResource Fg}" FontSize="12.5"
+                                     ToolTip.Tip="Azure Artifact Signing (formerly Trusted Signing) — cloud HSM signing via jsign."/>
                     </StackPanel>
 
                     <!-- PFX -->
@@ -260,27 +261,38 @@
                         </Grid>
                     </StackPanel>
 
-                    <!-- Azure Trusted Signing (jsign) -->
+                    <!-- Azure Artifact Signing (jsign) -->
                     <StackPanel x:Name="PanelTrustedSigning" Spacing="8" IsVisible="False">
+                        <!-- Live prerequisites callout: signer, token source, and the RBAC role. -->
+                        <Border Background="{DynamicResource Panel2Bg}"
+                                BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1"
+                                CornerRadius="6" Padding="10,8">
+                            <TextBlock x:Name="TxtTsPrereq" TextWrapping="Wrap" FontSize="11.5"
+                                       LineHeight="17" Foreground="{DynamicResource Dim}"/>
+                        </Border>
                         <Grid ColumnDefinitions="120,*">
                             <TextBlock Grid.Column="0" Classes="signLabel" Text="Endpoint"/>
                             <TextBox x:Name="TxtTsEndpoint" Grid.Column="1" Classes="path"
-                                     Watermark="e.g. weu.codesigning.azure.net"/>
+                                     Watermark="e.g. eus.codesigning.azure.net"
+                                     ToolTip.Tip="Your account's region host. In the Azure portal, open your Artifact Signing account → Overview → copy the &quot;Account URI&quot; (e.g. https://eus.codesigning.azure.net/). The https:// and trailing slash are optional — WrapTune strips them."/>
                         </Grid>
                         <Grid ColumnDefinitions="120,*">
                             <TextBlock Grid.Column="0" Classes="signLabel" Text="Account"/>
                             <TextBox x:Name="TxtTsAccount" Grid.Column="1" Classes="path"
-                                     Watermark="Trusted Signing account name"/>
+                                     Watermark="Artifact Signing account name"
+                                     ToolTip.Tip="The name of your Artifact Signing account resource (Azure portal → the account's name, or the codeSigningAccounts resource name)."/>
                         </Grid>
                         <Grid ColumnDefinitions="120,*">
                             <TextBlock Grid.Column="0" Classes="signLabel" Text="Cert profile"/>
                             <TextBox x:Name="TxtTsProfile" Grid.Column="1" Classes="path"
-                                     Watermark="Certificate profile name"/>
+                                     Watermark="Certificate profile name"
+                                     ToolTip.Tip="The certificate profile under your account: Azure portal → your Artifact Signing account → Certificate profiles → the profile name."/>
                         </Grid>
                         <Grid ColumnDefinitions="120,*">
                             <TextBlock Grid.Column="0" Classes="signLabel" Text="Access token"/>
                             <TextBox x:Name="TxtTsToken" Grid.Column="1" Classes="path" PasswordChar="•"
-                                     Watermark="Blank = auto-fetch via Azure CLI (az login)"/>
+                                     Watermark="Blank = auto-fetch via Azure CLI (az login)"
+                                     ToolTip.Tip="Leave blank to auto-fetch a fresh token via the Azure CLI (run az login first). Or paste one from: az account get-access-token --resource https://codesigning.azure.net --query accessToken -o tsv"/>
                         </Grid>
                     </StackPanel>
 

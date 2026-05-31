@@ -228,10 +228,27 @@ public partial class MainWindow : Window
         PanelPfx.IsVisible = mode == CertMode.Pfx;
         PanelPkcs11.IsVisible = mode == CertMode.Pkcs11;
         PanelTrustedSigning.IsVisible = ts;
-        // Trusted Signing carries its token in its own panel and auto-timestamps,
+        // Artifact Signing carries its token in its own panel and auto-timestamps,
         // so the shared Password/PIN and Timestamp rows don't apply.
         RowSecret.IsVisible = !ts;
         RowTimestamp.IsVisible = !ts;
+        if (ts) UpdateTrustedSigningPrereqs();
+    }
+
+    /// <summary>
+    /// Walk the user through Azure Artifact Signing setup: live-check that jsign and
+    /// the Azure CLI are present, and flag the RBAC role they'll otherwise hit a 403 on.
+    /// </summary>
+    private void UpdateTrustedSigningPrereqs()
+    {
+        var hasJsign = SignerLocator.LocateJsign() is not null;
+        var hasAz = SignerLocator.LocateAzureCli() is not null;
+        TxtTsPrereq.Text =
+            (hasJsign ? "✓  jsign found"
+                      : "⚠  jsign not found — install it:  brew install jsign") + "\n" +
+            (hasAz ? "✓  Azure CLI found — sign in first:  az login"
+                   : "⚠  Azure CLI not found — install it and run  az login,  or paste a token below") + "\n" +
+            "•  Your Azure identity needs the “Artifact Signing Certificate Profile Signer” role on the account (otherwise signing returns 403).";
     }
 
     private SigningOptions BuildSigningOptions()
