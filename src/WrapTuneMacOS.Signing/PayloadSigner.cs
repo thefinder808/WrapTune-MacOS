@@ -171,7 +171,30 @@ public sealed class PayloadSigner
         var args = BuildJsignArgs(file, options);
         var env = new Dictionary<string, string> { [TokenEnvVar] = token };
         var (exit, stdout, stderr) = await ProcessRunner.RunAsync(_jsign!, args, ct, env);
-        return exit == 0 ? null : Summarize(stderr, stdout);
+        return exit == 0 ? null : SummarizeJsign(stderr, stdout);
+    }
+
+    /// <summary>
+    /// Pick the informative line from jsign's output. jsign (picocli) puts the real
+    /// message first and an unhelpful "Try 'jsign --help'…" trailer last, with Java
+    /// stack frames in between — so the naïve last-line rule (fine for osslsigncode)
+    /// would surface only the trailer. Prefer an HTTP/"Caused by" root cause when
+    /// present (auth/network failures), else the first real line (parse errors).
+    /// </summary>
+    private static string SummarizeJsign(string stderr, string stdout)
+    {
+        var text = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+        var lines = text.Split('\n')
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0
+                        && !l.StartsWith("at ", StringComparison.Ordinal)
+                        && !l.Contains("--help'", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (lines.Count == 0) return "jsign failed (no diagnostic output).";
+
+        var cause = lines.LastOrDefault(l => l.Contains("HTTP Error", StringComparison.OrdinalIgnoreCase))
+                    ?? lines.FirstOrDefault(l => l.StartsWith("Caused by:", StringComparison.OrdinalIgnoreCase));
+        return cause ?? lines[0];
     }
 
     /// <summary>
