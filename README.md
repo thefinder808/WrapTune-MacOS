@@ -44,6 +44,10 @@ nowhere in the chain.
   (per-machine / per-user / dual-purpose) derived from the MSI's `ALLUSERS`
   property — the value Intune uses for the app's install behavior.
 - Drag-and-drop for the source folder and setup file.
+- **Optional Authenticode code-signing** of the payload before wrapping — sign
+  your `.exe`/`.msi`/`.ps1` from the Mac with a local cert (PFX or PKCS#11/HSM, via
+  `osslsigncode`) or **Azure Artifact Signing** — formerly Trusted Signing — (via `jsign`).
+  See [Signing the payload](#signing-the-payload-optional).
 - Light / dark theme.
 - Signed **and notarized** universal release (Apple Silicon + Intel).
 
@@ -71,13 +75,55 @@ build is notarized, Gatekeeper accepts it without the right-click-Open workaroun
 For `.msi` setup files, the package includes the MSI metadata Intune reads to
 pre-fill the product code (e.g. the uninstall command) and the install behavior.
 
+## Signing the payload (optional)
+
+Wrapping into `.intunewin` is *encryption*, not a publisher signature. If your
+fleet requires **Authenticode-signed** code (Verified Publisher, no SmartScreen
+block, WDAC/AppLocker "signed only" policies), WrapTune can sign the payload —
+your `.exe`/`.msi`/`.ps1` — **before** it's wrapped, in one pass.
+
+This is a clean-room-friendly add-on: signing runs entirely **outside** the
+`.intunewin` engine (which stays zero-dependency and pure-managed), by shelling out
+to open-source signers — [`osslsigncode`](https://github.com/mtrojnar/osslsigncode)
+(the cross-platform equivalent of Windows `SignTool`) for local certificates, and
+[`jsign`](https://ebourg.github.io/jsign/) for Azure Artifact Signing.
+
+**Prerequisite** — install the signer your cert needs (one-time):
+
+```bash
+brew install osslsigncode   # local certs: PFX / PKCS#11
+brew install jsign          # Azure Artifact Signing
+```
+
+Then open the **Code signing — optional** section and enable signing:
+
+- **PFX / .p12** — point at a `.pfx` file and enter its password (for self-signed,
+  test, or legacy certificates). *(osslsigncode)*
+- **PKCS#11 token / HSM** — point at the vendor's PKCS#11 module and supply the
+  cert/key URIs and PIN (the form modern public OV/EV certificates take).
+  *(osslsigncode)*
+- **Azure Artifact Signing** (formerly Trusted Signing) — enter your endpoint, account,
+  and certificate profile. The short-lived access token is fetched automatically via the
+  Azure CLI (`az login`), or you can paste one. Timestamping is automatic. Your Azure
+  identity needs the **"Artifact Signing Certificate Profile Signer"** role on the account,
+  or signing returns 403. *(jsign)*
+- Optional **RFC3161 timestamp URL** (PFX/PKCS#11 modes) so signatures stay valid
+  after the cert expires.
+
+Notes: the password/PIN/token is **entered each run and never saved**; files are
+signed **in place** in the source folder; and files that already carry a signature
+are **skipped** (so vendor-signed installers are never clobbered). Plain `.cmd`/`.bat`
+scripts can't be Authenticode-signed and are excluded. Full details:
+[`docs/PAYLOAD-SIGNING.md`](docs/PAYLOAD-SIGNING.md).
+
 ## How it differs from the Windows WrapTune
 
 The macOS window is intentionally simpler: there's **no "IntuneWinAppUtil.exe
 path"** field (the engine is built in) and **no Catalog folder** field (the
 official tool's `-a` Win10-S-mode catalog signing isn't reimplemented). Fields:
 Source folder, Setup file, Output folder, Overwrite, theme toggle, Package,
-output log.
+output log — plus an optional **Code signing** section (see above) that the
+Windows tool delegates to a separate signing step.
 
 ## Verifying a package
 
@@ -114,8 +160,9 @@ Releasing (signing + notarization) is tag-driven via GitHub Actions; see
 
 ```
 src/WrapTuneMacOS.Packaging   The .intunewin engine (class library, no UI)
+src/WrapTuneMacOS.Signing     Optional payload Authenticode signing (osslsigncode wrapper)
 src/WrapTuneMacOS             Avalonia desktop UI
-tests/                        Engine validation (round-trip, golden-fixture, MSI)
+tests/                        Engine + signing validation (round-trip, golden, MSI, sign-then-wrap)
 tools/verify-intunewin.py     Independent package verifier
 build-macos.sh                publish → .app → sign → .dmg → notarize
 ```

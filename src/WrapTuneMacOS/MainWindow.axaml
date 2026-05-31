@@ -80,11 +80,42 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
+        <Style Selector="TextBlock.signLabel">
+            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <!-- Collapsible section header + body, themed to match the rest of the app
+             (avoids the Fluent Expander's own dark chrome). -->
+        <Style Selector="Button.section">
+            <Setter Property="Height" Value="44"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="Background" Value="{DynamicResource PanelBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.section:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Panel2Bg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        </Style>
+        <Style Selector="Border.sectionBody">
+            <Setter Property="Margin" Value="0,8,0,0"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Background" Value="{DynamicResource PanelBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
     </Window.Styles>
 
-    <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+    <Grid Margin="24" RowDefinitions="Auto,*,Auto">
 
-        <!-- 0 · Header -->
+        <!-- 0 · Header (pinned) -->
         <Grid Grid.Row="0" Margin="0,0,0,14" ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0">
                 <TextBlock Text="New package" FontSize="20" FontWeight="SemiBold"
@@ -99,8 +130,14 @@
                     Content="◐ Dark" Click="BtnTheme_Click" VerticalAlignment="Top"/>
         </Grid>
 
-        <!-- 1 · Built-in engine pill (replaces WrapTune's exe-path row) -->
-        <Border Grid.Row="1" Margin="0,0,0,16"
+        <!-- Scrollable body — keeps the footer (Package) pinned even when the
+             optional signing section is expanded taller than the window. -->
+        <ScrollViewer Grid.Row="1" Margin="0,0,0,14"
+                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel>
+
+        <!-- Built-in engine pill (replaces WrapTune's exe-path row) -->
+        <Border Margin="0,0,0,16"
                 Background="{DynamicResource AccentSoft}"
                 BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1"
                 CornerRadius="8" Padding="14,10">
@@ -115,8 +152,8 @@
             </StackPanel>
         </Border>
 
-        <!-- 2 · Form rows -->
-        <Grid Grid.Row="2" ColumnDefinitions="128,*,Auto" RowDefinitions="Auto,Auto,Auto">
+        <!-- Form rows -->
+        <Grid ColumnDefinitions="128,*,Auto" RowDefinitions="Auto,Auto,Auto">
 
             <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,14,10" VerticalAlignment="Center">
                 <TextBlock Classes="fieldLabel" Text="Source folder"/>
@@ -149,8 +186,8 @@
                     Classes="browse" Click="BtnBrowseOutput_Click"/>
         </Grid>
 
-        <!-- 3 · Overwrite toggle -->
-        <CheckBox x:Name="ChkOverwrite" Grid.Row="3" Margin="142,14,0,16" IsChecked="True"
+        <!-- Overwrite toggle -->
+        <CheckBox x:Name="ChkOverwrite" Margin="142,14,0,16" IsChecked="True"
                   Foreground="{DynamicResource Fg}" FontSize="12.5">
             <TextBlock>
                 <Run Text="Overwrite existing output "/>
@@ -158,8 +195,149 @@
             </TextBlock>
         </CheckBox>
 
-        <!-- 4 · Output log -->
-        <Border Grid.Row="4" Margin="0,0,0,14"
+        <!-- Code signing (optional) — custom collapsible, themed to match the app -->
+        <StackPanel Margin="0,0,0,14">
+            <Button x:Name="BtnSignToggle" Classes="section" Click="BtnSignToggle_Click">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="Code signing — optional"
+                               VerticalAlignment="Center" FontSize="12.5" FontWeight="Medium"
+                               Foreground="{DynamicResource Fg}"/>
+                    <TextBlock x:Name="SignChevron" Grid.Column="1" Text="⌄"
+                               VerticalAlignment="Center" FontSize="14"
+                               Foreground="{DynamicResource Dim}"/>
+                </Grid>
+            </Button>
+            <Border x:Name="SignBody" Classes="sectionBody" IsVisible="False">
+                <StackPanel Spacing="10">
+                <CheckBox x:Name="ChkSignPayload" IsCheckedChanged="ChkSignPayload_IsCheckedChanged"
+                          Foreground="{DynamicResource Fg}" FontSize="12.5">
+                    <TextBlock Text="Authenticode-sign the payload before packaging"/>
+                </CheckBox>
+
+                <StackPanel x:Name="SigningFields" Spacing="10">
+                    <TextBlock TextWrapping="Wrap" FontSize="11.5" Foreground="{DynamicResource Dim}"
+                               Text="Signs files in place; already-signed files are skipped. Local certs need osslsigncode (brew install osslsigncode); Azure Artifact Signing needs jsign (brew install jsign)."/>
+
+                    <StackPanel Orientation="Horizontal" Spacing="18">
+                        <RadioButton x:Name="RbPfx" GroupName="certMode" IsChecked="True"
+                                     IsCheckedChanged="RbCertMode_IsCheckedChanged"
+                                     Content="PFX / .p12 file" Foreground="{DynamicResource Fg}" FontSize="12.5"/>
+                        <RadioButton x:Name="RbPkcs11" GroupName="certMode"
+                                     IsCheckedChanged="RbCertMode_IsCheckedChanged"
+                                     Content="PKCS#11 token / HSM" Foreground="{DynamicResource Fg}" FontSize="12.5"/>
+                        <RadioButton x:Name="RbTrustedSigning" GroupName="certMode"
+                                     IsCheckedChanged="RbCertMode_IsCheckedChanged"
+                                     Content="Azure Artifact Signing" Foreground="{DynamicResource Fg}" FontSize="12.5"
+                                     ToolTip.Tip="Azure Artifact Signing (formerly Trusted Signing) — cloud HSM signing via jsign."/>
+                    </StackPanel>
+
+                    <!-- PFX -->
+                    <Grid x:Name="PanelPfx" ColumnDefinitions="120,*,Auto">
+                        <TextBlock Grid.Column="0" Classes="signLabel" Text="Certificate"/>
+                        <TextBox x:Name="TxtPfxPath" Grid.Column="1" Classes="path"
+                                 Watermark="Path to .pfx / .p12"/>
+                        <Button x:Name="BtnBrowsePfx" Grid.Column="2" Margin="6,0,0,0"
+                                Classes="browse" Click="BtnBrowsePfx_Click"/>
+                    </Grid>
+
+                    <!-- PKCS#11 -->
+                    <StackPanel x:Name="PanelPkcs11" Spacing="8" IsVisible="False">
+                        <Grid ColumnDefinitions="120,*,Auto">
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Module"/>
+                            <TextBox x:Name="TxtPkcs11Module" Grid.Column="1" Classes="path"
+                                     Watermark="PKCS#11 module (.dylib / .so)"/>
+                            <Button x:Name="BtnBrowsePkcs11" Grid.Column="2" Margin="6,0,0,0"
+                                    Classes="browse" Click="BtnBrowsePkcs11_Click"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="120,*">
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Cert URI"/>
+                            <TextBox x:Name="TxtPkcs11Cert" Grid.Column="1" Classes="path"
+                                     Watermark="pkcs11:token=…;object=…  (optional)"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="120,*">
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Key URI"/>
+                            <TextBox x:Name="TxtKeyUri" Grid.Column="1" Classes="path"
+                                     Watermark="pkcs11:token=…;object=…"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Azure Artifact Signing (jsign) -->
+                    <StackPanel x:Name="PanelTrustedSigning" Spacing="8" IsVisible="False">
+                        <!-- Live prerequisites callout: signer, token source, and the RBAC role. -->
+                        <Border Background="{DynamicResource Panel2Bg}"
+                                BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1"
+                                CornerRadius="6" Padding="10,8">
+                            <TextBlock x:Name="TxtTsPrereq" TextWrapping="Wrap" FontSize="11.5"
+                                       LineHeight="17" Foreground="{DynamicResource Dim}"/>
+                        </Border>
+                        <Grid ColumnDefinitions="120,*">
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Endpoint"/>
+                            <TextBox x:Name="TxtTsEndpoint" Grid.Column="1" Classes="path"
+                                     Watermark="e.g. eus.codesigning.azure.net"
+                                     ToolTip.Tip="Your account's region host. In the Azure portal, open your Artifact Signing account → Overview → copy the &quot;Account URI&quot; (e.g. https://eus.codesigning.azure.net/). The https:// and trailing slash are optional — WrapTune strips them."/>
+                        </Grid>
+                        <Grid ColumnDefinitions="120,*">
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Account"/>
+                            <TextBox x:Name="TxtTsAccount" Grid.Column="1" Classes="path"
+                                     Watermark="Artifact Signing account name"
+                                     ToolTip.Tip="The name of your Artifact Signing account resource (Azure portal → the account's name, or the codeSigningAccounts resource name)."/>
+                        </Grid>
+                        <Grid ColumnDefinitions="120,*">
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Cert profile"/>
+                            <TextBox x:Name="TxtTsProfile" Grid.Column="1" Classes="path"
+                                     Watermark="Certificate profile name"
+                                     ToolTip.Tip="The certificate profile under your account: Azure portal → your Artifact Signing account → Certificate profiles → the profile name."/>
+                        </Grid>
+                        <Grid ColumnDefinitions="120,*">
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Access token"/>
+                            <TextBox x:Name="TxtTsToken" Grid.Column="1" Classes="path" PasswordChar="•"
+                                     Watermark="Blank = auto-fetch via Azure CLI (az login)"
+                                     ToolTip.Tip="Leave blank to auto-fetch a fresh token via the Azure CLI (run az login first). Or paste one from: az account get-access-token --resource https://codesigning.azure.net --query accessToken -o tsv"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <Grid x:Name="RowSecret" ColumnDefinitions="120,*">
+                        <TextBlock Grid.Column="0" Classes="signLabel" Text="Password / PIN"/>
+                        <TextBox x:Name="TxtSecret" Grid.Column="1" Classes="path" PasswordChar="•"
+                                 Watermark="Not saved — entered each run"/>
+                    </Grid>
+
+                    <Grid x:Name="RowTimestamp" ColumnDefinitions="120,*">
+                        <TextBlock Grid.Column="0" Classes="signLabel" Text="Timestamp URL"/>
+                        <TextBox x:Name="TxtTimestampUrl" Grid.Column="1" Classes="path"
+                                 Watermark="RFC3161 timestamp server (blank to skip)"/>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="120,*">
+                        <TextBlock Grid.Column="0" Classes="signLabel" Text="Description"/>
+                        <TextBox x:Name="TxtSignDescription" Grid.Column="1" Classes="path"
+                                 Watermark="Signature description (optional)"/>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="120,*">
+                        <TextBlock Grid.Column="0" Classes="signLabel" Text="URL"/>
+                        <TextBox x:Name="TxtSignUrl" Grid.Column="1" Classes="path"
+                                 Watermark="Signature URL (optional)"/>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="120,*,Auto">
+                        <TextBlock Grid.Column="0" Classes="signLabel" Text="osslsigncode"/>
+                        <TextBox x:Name="TxtOsslPath" Grid.Column="1" Classes="path"
+                                 Watermark="Auto-detected (Homebrew) — override optional"/>
+                        <Button x:Name="BtnCheckSigner" Grid.Column="2" Margin="6,0,0,0"
+                                Classes="secondary" Content="Check" Click="BtnCheckSigner_Click"/>
+                    </Grid>
+
+                    <CheckBox x:Name="ChkSignAllFiles" Foreground="{DynamicResource Fg}" FontSize="12.5">
+                        <TextBlock Text="Also sign other signable files in the source folder"/>
+                    </CheckBox>
+                </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- Output log -->
+        <Border MinHeight="150" MaxHeight="280"
                 Background="{DynamicResource LogBg}"
                 BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1"
                 CornerRadius="8">
@@ -171,8 +349,11 @@
                      Foreground="{DynamicResource Dim}" Padding="12"/>
         </Border>
 
-        <!-- 5 · Footer -->
-        <Grid Grid.Row="5" ColumnDefinitions="*,Auto,Auto">
+        </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer (pinned) -->
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto">
             <TextBlock x:Name="TxtStatus" Grid.Column="0" Text="Ready"
                        VerticalAlignment="Center" FontSize="11.5"
                        Foreground="{DynamicResource Dimmer}"/>

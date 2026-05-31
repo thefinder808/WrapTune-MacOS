@@ -25,6 +25,12 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      # Lets the optional payload-signing integration tests run instead of
+      # self-skipping. The shipped app does NOT bundle osslsigncode — users
+      # install it themselves; this is for CI coverage only.
+      - name: Install osslsigncode (for signing tests)
+        run: brew install osslsigncode
+
       - name: Test
         run: dotnet test --configuration Release
 
