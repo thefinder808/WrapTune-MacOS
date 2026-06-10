@@ -216,7 +216,7 @@
 
                 <StackPanel x:Name="SigningFields" Spacing="10">
                     <TextBlock TextWrapping="Wrap" FontSize="11.5" Foreground="{DynamicResource Dim}"
-                               Text="Signs files in place; already-signed files are skipped. Local certs need osslsigncode (brew install osslsigncode); Azure Artifact Signing needs jsign (brew install jsign)."/>
+                               Text="Signs files in place; already-signed files are skipped. Signing runs in-process — nothing extra to install."/>
 
                     <StackPanel Orientation="Horizontal" Spacing="18">
                         <RadioButton x:Name="RbPfx" GroupName="certMode" IsChecked="True"
@@ -228,7 +228,7 @@
                         <RadioButton x:Name="RbTrustedSigning" GroupName="certMode"
                                      IsCheckedChanged="RbCertMode_IsCheckedChanged"
                                      Content="Azure Artifact Signing" Foreground="{DynamicResource Fg}" FontSize="12.5"
-                                     ToolTip.Tip="Azure Artifact Signing (formerly Trusted Signing) — cloud HSM signing via jsign."/>
+                                     ToolTip.Tip="Azure Artifact Signing (formerly Trusted Signing) — cloud HSM signing; the key never leaves Azure."/>
                     </StackPanel>
 
                     <!-- PFX -->
@@ -250,14 +250,10 @@
                                     Classes="browse" Click="BtnBrowsePkcs11_Click"/>
                         </Grid>
                         <Grid ColumnDefinitions="120,*">
-                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Cert URI"/>
-                            <TextBox x:Name="TxtPkcs11Cert" Grid.Column="1" Classes="path"
-                                     Watermark="pkcs11:token=…;object=…  (optional)"/>
-                        </Grid>
-                        <Grid ColumnDefinitions="120,*">
-                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Key URI"/>
-                            <TextBox x:Name="TxtKeyUri" Grid.Column="1" Classes="path"
-                                     Watermark="pkcs11:token=…;object=…"/>
+                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Thumbprint"/>
+                            <TextBox x:Name="TxtPkcs11Thumbprint" Grid.Column="1" Classes="path"
+                                     Watermark="Certificate thumbprint — optional when the token holds one cert"
+                                     ToolTip.Tip="Only needed to pick a certificate when the token holds several. Leave blank when it holds exactly one."/>
                         </Grid>
                     </StackPanel>
 
@@ -318,14 +314,6 @@
                         <TextBlock Grid.Column="0" Classes="signLabel" Text="URL"/>
                         <TextBox x:Name="TxtSignUrl" Grid.Column="1" Classes="path"
                                  Watermark="Signature URL (optional)"/>
-                    </Grid>
-
-                    <Grid ColumnDefinitions="120,*,Auto">
-                        <TextBlock Grid.Column="0" Classes="signLabel" Text="osslsigncode"/>
-                        <TextBox x:Name="TxtOsslPath" Grid.Column="1" Classes="path"
-                                 Watermark="Auto-detected (Homebrew) — override optional"/>
-                        <Button x:Name="BtnCheckSigner" Grid.Column="2" Margin="6,0,0,0"
-                                Classes="secondary" Content="Check" Click="BtnCheckSigner_Click"/>
                     </Grid>
 
                     <CheckBox x:Name="ChkSignAllFiles" Foreground="{DynamicResource Fg}" FontSize="12.5">

@@ -3,13 +3,41 @@ using WrapTuneMacOS.Signing;
 namespace WrapTuneMacOS.Signing.Tests;
 
 /// <summary>
-/// Shared helpers for the signing integration tests. Both <c>osslsigncode</c>
-/// (located via <see cref="SignerLocator"/>) and <c>openssl</c> must be present;
-/// tests self-skip otherwise.
+/// Shared helpers for the signing integration tests. Signing itself runs in-process
+/// (the MacSign engine), but the tests still need <c>openssl</c> (to mint a
+/// throwaway PFX) and <c>osslsigncode</c> (as an INDEPENDENT verifier of the
+/// engine's output — same philosophy as <c>tools/verify-intunewin.py</c>); tests
+/// self-skip otherwise.
 /// </summary>
 internal static class SigningTestEnv
 {
     public const string Password = "testpw";
+
+    /// <summary>Common Homebrew bin directories: Apple-silicon first, then Intel.</summary>
+    private static readonly string[] BinDirs = ["/opt/homebrew/bin", "/usr/local/bin"];
+
+    /// <summary>
+    /// Find osslsigncode for cross-verification. The signing lib no longer locates
+    /// it (nothing shells out to it any more), so the tests do it themselves.
+    /// </summary>
+    public static string? LocateOsslsigncode()
+    {
+        foreach (var dir in BinDirs)
+        {
+            var candidate = Path.Combine(dir, "osslsigncode");
+            if (File.Exists(candidate)) return candidate;
+        }
+
+        var pathVar = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrEmpty(pathVar)) return null;
+        foreach (var dir in pathVar.Split(Path.PathSeparator))
+        {
+            if (string.IsNullOrWhiteSpace(dir)) continue;
+            var candidate = Path.Combine(dir, "osslsigncode");
+            if (File.Exists(candidate)) return candidate;
+        }
+        return null;
+    }
 
     public static async Task<bool> HasOpenSslAsync()
     {

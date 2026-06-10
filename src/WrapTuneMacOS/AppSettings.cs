@@ -29,8 +29,7 @@ public sealed class AppSettings
 
     public string? SignPfxPath { get; set; }
     public string? SignPkcs11ModulePath { get; set; }
-    public string? SignPkcs11CertUri { get; set; }
-    public string? SignKeyUri { get; set; }
+    public string? SignPkcs11CertThumbprint { get; set; }
     public string? SignTimestampUrl { get; set; }
     public string? SignDescription { get; set; }
     public string? SignUrl { get; set; }
@@ -40,9 +39,6 @@ public sealed class AppSettings
     public string? SignTsEndpoint { get; set; }
     public string? SignTsAccount { get; set; }
     public string? SignTsProfile { get; set; }
-
-    /// <summary>Optional explicit path to osslsigncode; blank auto-detects.</summary>
-    public string? OsslsigncodePath { get; set; }
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 

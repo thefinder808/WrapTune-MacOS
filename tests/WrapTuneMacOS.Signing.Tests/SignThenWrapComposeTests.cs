@@ -9,14 +9,15 @@ namespace WrapTuneMacOS.Signing.Tests;
 /// with the unchanged <c>.intunewin</c> engine. Because signing happens before
 /// the engine zips and hashes, the package's FileDigest/HMAC/size must validate
 /// over the SIGNED bytes, and the recovered payload must still carry the
-/// signature. Self-skips when osslsigncode / openssl are absent.
+/// signature (confirmed by osslsigncode as an independent verifier). Self-skips
+/// when osslsigncode / openssl are absent.
 /// </summary>
 public sealed class SignThenWrapComposeTests
 {
     [Fact]
     public async Task Signed_payload_wraps_into_a_valid_package_and_stays_signed()
     {
-        var ossl = SignerLocator.Locate();
+        var ossl = SigningTestEnv.LocateOsslsigncode();
         if (ossl is null) return;
         if (!await SigningTestEnv.HasOpenSslAsync()) return;
 

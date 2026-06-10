@@ -1,4 +1,6 @@
-using System.Text;
+using EngineCertMode = MacSign.Signing.CertMode;
+using EngineOptions = MacSign.Signing.SigningOptions;
+using EngineSigner = MacSign.Signing.AuthenticodeSigner;
 
 namespace WrapTuneMacOS.Signing;
 
@@ -9,50 +11,48 @@ namespace WrapTuneMacOS.Signing;
 /// so its supply-chain auditability is untouched. Signing only mutates the
 /// <i>payload</i> files.
 ///
-/// Two backends, chosen by <see cref="SigningOptions.CertMode"/>:
-/// <list type="bullet">
-/// <item>PFX / PKCS#11 → <c>osslsigncode</c> (signs to a sibling temp, atomic replace).</item>
-/// <item>Azure Trusted Signing → <c>jsign</c> (signs in place; cloud HSM token).</item>
-/// </list>
-/// Files that already carry a signature are skipped (best-effort, via osslsigncode
-/// verify) so vendor-signed installers are never clobbered.
+/// Signing itself runs <b>in process</b> via the MacSign engine
+/// (github.com/thefinder808/macsign) — PE/.ps1/.msi formats, PFX / PKCS#11 / Azure
+/// Trusted Signing credentials, RFC3161 timestamping. No external signing tools are
+/// needed. The only remaining shell-out is the optional Azure CLI token fetch in
+/// Trusted Signing mode (<see cref="AzureTokenProvider"/>). Files that already carry
+/// a signature are skipped (in-process verify, all modes) so vendor-signed installers
+/// are never clobbered.
 /// </summary>
 public sealed class PayloadSigner
 {
-    /// <summary>Env var used to pass the Azure token to jsign (never on the command line).</summary>
-    private const string TokenEnvVar = "WT_TS_TOKEN";
+    /// <summary>
+    /// Microsoft's TSA, used in Trusted Signing mode when the user leaves the
+    /// timestamp URL empty. Trusted Signing certs are short-lived, so an
+    /// untimestamped signature would die with the cert — never skip timestamping.
+    /// </summary>
+    public const string DefaultTrustedSigningTimestampUrl = "http://timestamp.acs.microsoft.com";
 
-    private readonly string? _osslsigncode;   // PFX/PKCS#11 signing + the already-signed verify check
-    private readonly string? _jsign;           // Azure Trusted Signing
-    private readonly string? _azureCli;        // token auto-fetch (Trusted Signing)
+    private readonly string? _azureCli;   // token auto-fetch (Trusted Signing)
 
-    private PayloadSigner(string? osslsigncode, string? jsign, string? azureCli)
+    static PayloadSigner()
     {
-        _osslsigncode = osslsigncode;
-        _jsign = jsign;
-        _azureCli = azureCli;
+        // The engine's MSI format and PKCS#11/Azure credential backends live in
+        // quarantined assemblies and must be hooked in once per process.
+        MacSign.Signing.Msi.MsiBackend.Register();
+        MacSign.Signing.Pkcs11.Pkcs11Backend.Register();
+        MacSign.Signing.Azure.AzureBackend.Register();
     }
 
+    private PayloadSigner(string? azureCli) => _azureCli = azureCli;
+
     /// <summary>
-    /// Create a signer, resolving the tool(s) the chosen mode needs. Returns null and
-    /// sets <paramref name="error"/> (an install hint) when a required tool is missing.
-    /// For Trusted Signing, osslsigncode (used only for the optional already-signed
-    /// check) and the Azure CLI are best-effort, not required.
+    /// Create a signer after validating the options for the chosen mode (the PFX
+    /// exists, the Trusted Signing account fields are present, …). Returns null and
+    /// sets <paramref name="error"/> when they're not usable.
     /// </summary>
     public static PayloadSigner? TryCreate(SigningOptions options, out string? error)
     {
-        if (options.CertMode == CertMode.TrustedSigning)
-        {
-            var jsign = SignerLocator.LocateJsign();
-            if (jsign is null) { error = SignerLocator.JsignInstallHint; return null; }
-            error = null;
-            return new PayloadSigner(SignerLocator.Locate(options.OsslsigncodePath), jsign, SignerLocator.LocateAzureCli());
-        }
+        if (EngineSigner.TryCreate(MapOptions(options, accessToken: null), out error) is null)
+            return null;
 
-        var ossl = SignerLocator.Locate(options.OsslsigncodePath);
-        if (ossl is null) { error = SignerLocator.InstallHint; return null; }
-        error = null;
-        return new PayloadSigner(ossl, jsign: null, azureCli: null);
+        return new PayloadSigner(
+            options.CertMode == CertMode.TrustedSigning ? SignerLocator.LocateAzureCli() : null);
     }
 
     /// <summary>
@@ -65,332 +65,76 @@ public sealed class PayloadSigner
         string sourceFolder, string setupFile, SigningOptions options,
         IProgress<string>? log = null, CancellationToken ct = default)
     {
-        var setupSignable = SignableExtensions.IsSignable(setupFile);
-        if (!options.SignAllSignableFiles && !setupSignable)
-            return SignResult.Fail(
-                $"'{Path.GetFileName(setupFile)}' is a script type Authenticode can't sign (.cmd/.bat). " +
-                "Turn on \"sign all signable files\" or choose a signable setup file.");
-
-        var targets = CollectTargets(sourceFolder, setupFile, options);
-        if (targets.Count == 0)
-            return SignResult.Fail("No Authenticode-signable files were found to sign.");
-
-        if (options.SignAllSignableFiles && !setupSignable)
-            log?.Report($"Note: setup file '{Path.GetFileName(setupFile)}' isn't a signable type — signing the other files.");
-
-        // Resolve the run's credential once: a -readpass temp file for osslsigncode,
-        // or an Azure token for jsign (Trusted Signing).
-        string? passFile = null;
-        string? tsToken = null;
+        // Resolve the Azure token up front (pasted token or Azure CLI) and hand it to
+        // the engine explicitly. Never rely on the engine's DefaultAzureCredential
+        // fallback: launched from Finder/Dock the app only has the minimal launchd
+        // PATH, where the credential chain's own `az` probe can't find a Homebrew az.
+        string? accessToken = null;
         if (options.CertMode == CertMode.TrustedSigning)
         {
             var (token, tokenError) = await AzureTokenProvider.TryGetTokenAsync(options.Secret, _azureCli, ct);
             if (token is null) return SignResult.Fail(tokenError!);
-            tsToken = token;
-        }
-        else
-        {
-            passFile = WriteSecretFile(options.Secret);
+            accessToken = token;
         }
 
-        try
-        {
-            foreach (var file in targets)
-            {
-                ct.ThrowIfCancellationRequested();
+        var engineOptions = MapOptions(options, accessToken);
+        var signer = EngineSigner.TryCreate(engineOptions, out var error);
+        if (signer is null) return SignResult.Fail(error!);
 
-                if (await ExistingSignatureAsync(file, ct) is { } subject)
-                {
-                    log?.Report($"Skipping {Path.GetFileName(file)} — already signed ({subject}).");
-                    continue;
-                }
-
-                log?.Report($"Signing {Path.GetFileName(file)}…");
-                var err = options.CertMode == CertMode.TrustedSigning
-                    ? await SignWithJsignAsync(file, options, tsToken!, ct)
-                    : await SignWithOsslAsync(file, options, passFile, ct);
-                if (err is not null)
-                    return SignResult.Fail($"Failed to sign {Path.GetFileName(file)}: {err}");
-                log?.Report($"Signed {Path.GetFileName(file)}.");
-            }
-
-            return SignResult.Ok();
-        }
-        finally
-        {
-            if (passFile is not null) TryDelete(passFile);
-        }
-    }
-
-    private static List<string> CollectTargets(string sourceFolder, string setupFile, SigningOptions options)
-    {
-        var setupFull = Path.GetFullPath(setupFile);
-        if (!options.SignAllSignableFiles)
-            return SignableExtensions.IsSignable(setupFull) ? [setupFull] : [];
-
-        var targets = new List<string>();
-        foreach (var f in Directory.EnumerateFiles(sourceFolder, "*", SearchOption.AllDirectories))
-            if (SignableExtensions.IsSignable(f))
-                targets.Add(Path.GetFullPath(f));
-        return targets;
+        var result = await signer.SignAsync(sourceFolder, setupFile, engineOptions, log, ct);
+        return result.Success
+            ? SignResult.Ok()
+            : SignResult.Fail(WithRbacHint(options.CertMode, result.Error!));
     }
 
     /// <summary>
-    /// Sign one file in place with osslsigncode: <c>sign … -in file -out file.signtmp</c>,
-    /// then atomically replace the original. Returns null on success, else an error.
+    /// Map WrapTune's UI-facing options onto the engine's. Internal + static so the
+    /// mapping is unit-testable offline. In Trusted Signing mode <c>Secret</c> is the
+    /// (optional) pasted Azure token, not a credential secret — it travels via
+    /// <paramref name="accessToken"/> instead.
     /// </summary>
-    private async Task<string?> SignWithOsslAsync(string file, SigningOptions options, string? passFile, CancellationToken ct)
+    internal static EngineOptions MapOptions(SigningOptions o, string? accessToken) => new()
     {
-        var temp = file + ".signtmp";
-        try
+        CertMode = o.CertMode switch
         {
-            var args = BuildSignArgs(file, temp, options, passFile);
-            var (exit, stdout, stderr) = await ProcessRunner.RunAsync(_osslsigncode!, args, ct);
-            if (exit != 0)
-                return Summarize(stderr, stdout);
-            if (!File.Exists(temp))
-                return "osslsigncode reported success but wrote no output file.";
+            CertMode.Pkcs11 => EngineCertMode.Pkcs11,
+            CertMode.TrustedSigning => EngineCertMode.TrustedSigning,
+            _ => EngineCertMode.Pfx,
+        },
+        PfxPath = o.PfxPath,
+        Pkcs11ModulePath = o.Pkcs11ModulePath,
+        Pkcs11CertThumbprint = NullIfBlank(o.Pkcs11CertThumbprint),
+        TrustedSigningEndpoint = o.TrustedSigningEndpoint,
+        TrustedSigningAccount = o.TrustedSigningAccount,
+        TrustedSigningProfile = o.TrustedSigningProfile,
+        TrustedSigningAccessToken = accessToken,
+        TimestampUrl = ResolveTimestampUrl(o),
+        Description = NullIfBlank(o.Description),
+        Url = NullIfBlank(o.Url),
+        SignAllSignableFiles = o.SignAllSignableFiles,
+        Secret = o.CertMode == CertMode.TrustedSigning ? null : o.Secret,
+    };
 
-            File.Move(temp, file, overwrite: true);   // same volume → atomic rename
-            return null;
-        }
-        finally
-        {
-            TryDelete(temp);   // no-op after a successful move
-        }
-    }
+    /// <summary>Trusted Signing always timestamps (Microsoft TSA by default); other modes only when asked.</summary>
+    internal static string? ResolveTimestampUrl(SigningOptions o) =>
+        o.CertMode == CertMode.TrustedSigning && string.IsNullOrWhiteSpace(o.TimestampUrl)
+            ? DefaultTrustedSigningTimestampUrl
+            : NullIfBlank(o.TimestampUrl);
 
     /// <summary>
-    /// Sign one file in place with jsign via Azure Trusted Signing. jsign writes the
-    /// signature into the file directly. The token is passed via a child-process env
-    /// var (<c>--storepass env:</c>), never on the command line. Returns null on
-    /// success, else an error.
+    /// A 403 in Trusted Signing mode means the token authenticated but the identity
+    /// isn't authorized — almost always the missing signer role. Point the user
+    /// straight at it.
     /// </summary>
-    private async Task<string?> SignWithJsignAsync(string file, SigningOptions options, string token, CancellationToken ct)
+    internal static string WithRbacHint(CertMode mode, string message)
     {
-        var args = BuildJsignArgs(file, options);
-        var env = new Dictionary<string, string> { [TokenEnvVar] = token };
-        var (exit, stdout, stderr) = await ProcessRunner.RunAsync(_jsign!, args, ct, env);
-        if (exit == 0) return null;
-
-        var message = SummarizeJsign(stderr, stdout);
-        // A 403 here means the token authenticated but the identity isn't authorized —
-        // almost always the missing signer role. Point the user straight at it.
-        if (message.Contains("403", StringComparison.Ordinal) ||
-            message.Contains("Forbidden", StringComparison.OrdinalIgnoreCase))
-            message += "  →  Your Azure identity likely needs the \"Artifact Signing Certificate Profile Signer\" " +
-                       "role on the account (role assignments can take a few minutes to propagate).";
+        if (mode == CertMode.TrustedSigning &&
+            (message.Contains("403", StringComparison.Ordinal) ||
+             message.Contains("Forbidden", StringComparison.OrdinalIgnoreCase)))
+            return message + "  →  Your Azure identity likely needs the \"Artifact Signing Certificate Profile Signer\" " +
+                             "role on the account (role assignments can take a few minutes to propagate).";
         return message;
     }
 
-    /// <summary>
-    /// Pick the informative line from jsign's output. jsign (picocli) puts the real
-    /// message first and an unhelpful "Try 'jsign --help'…" trailer last, with Java
-    /// stack frames in between — so the naïve last-line rule (fine for osslsigncode)
-    /// would surface only the trailer. Prefer an HTTP/"Caused by" root cause when
-    /// present (auth/network failures), else the first real line (parse errors).
-    /// </summary>
-    private static string SummarizeJsign(string stderr, string stdout)
-    {
-        var text = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
-        var lines = text.Split('\n')
-            .Select(l => l.Trim())
-            .Where(l => l.Length > 0
-                        && !l.StartsWith("at ", StringComparison.Ordinal)
-                        && !l.Contains("--help'", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        if (lines.Count == 0) return "jsign failed (no diagnostic output).";
-
-        var cause = lines.LastOrDefault(l => l.Contains("HTTP Error", StringComparison.OrdinalIgnoreCase))
-                    ?? lines.FirstOrDefault(l => l.StartsWith("Caused by:", StringComparison.OrdinalIgnoreCase));
-        return cause ?? lines[0];
-    }
-
-    /// <summary>
-    /// Detect an existing signature so we never clobber one (e.g. a vendor-signed
-    /// MSI). Returns a short signer description when a signature is present, or
-    /// null when the file is unsigned. osslsigncode prints "No signature found"
-    /// for unsigned files; any other result is treated as "a signature exists" so
-    /// we err toward skipping rather than overwriting.
-    /// </summary>
-    private async Task<string?> ExistingSignatureAsync(string file, CancellationToken ct)
-    {
-        // Best-effort: only osslsigncode can verify. In Trusted Signing mode without
-        // osslsigncode installed, the check is skipped (jsign appends rather than
-        // clobbers, so worst case is a redundant signature, not a lost one).
-        if (_osslsigncode is null) return null;
-        try
-        {
-            var (exit, stdout, stderr) = await ProcessRunner.RunAsync(_osslsigncode, ["verify", "-in", file], ct);
-            var output = stdout + "\n" + stderr;
-
-            if (output.Contains("No signature found", StringComparison.OrdinalIgnoreCase))
-                return null;
-
-            var present = exit == 0
-                || output.Contains("Signer", StringComparison.OrdinalIgnoreCase)
-                || output.Contains("Subject", StringComparison.OrdinalIgnoreCase);
-            if (!present) return null;
-
-            return ExtractSubject(output) ?? "existing signature";
-        }
-        catch
-        {
-            // Couldn't determine — fall through to signing; the sign step surfaces real errors.
-            return null;
-        }
-    }
-
-    private static string? ExtractSubject(string output)
-    {
-        foreach (var line in output.Split('\n'))
-        {
-            var t = line.Trim();
-            var idx = t.IndexOf("Subject:", StringComparison.OrdinalIgnoreCase);
-            if (idx >= 0)
-            {
-                var value = t[(idx + "Subject:".Length)..].Trim();
-                if (value.Length > 0) return value;
-            }
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Build the osslsigncode <c>sign</c> argument list. Internal + static so it can
-    /// be unit-tested offline (no binary required).
-    /// </summary>
-    internal static List<string> BuildSignArgs(string inFile, string outFile, SigningOptions o, string? passFile)
-    {
-        var args = new List<string> { "sign" };
-
-        if (o.CertMode == CertMode.Pkcs11)
-        {
-            args.Add("-pkcs11module");
-            args.Add(o.Pkcs11ModulePath ?? "");
-            if (!string.IsNullOrWhiteSpace(o.Pkcs11CertUri))
-            {
-                args.Add("-pkcs11cert");
-                args.Add(o.Pkcs11CertUri);
-            }
-            args.Add("-key");
-            args.Add(o.KeyUri ?? "");
-        }
-        else
-        {
-            args.Add("-pkcs12");
-            args.Add(o.PfxPath ?? "");
-        }
-
-        if (passFile is not null)
-        {
-            args.Add("-readpass");
-            args.Add(passFile);
-        }
-
-        args.Add("-h");
-        args.Add("sha256");
-
-        if (!string.IsNullOrWhiteSpace(o.Description))
-        {
-            args.Add("-n");
-            args.Add(o.Description);
-        }
-        if (!string.IsNullOrWhiteSpace(o.Url))
-        {
-            args.Add("-i");
-            args.Add(o.Url);
-        }
-        if (!string.IsNullOrWhiteSpace(o.TimestampUrl))
-        {
-            args.Add("-ts");   // RFC3161 timestamping
-            args.Add(o.TimestampUrl);
-        }
-
-        args.Add("-in");
-        args.Add(inFile);
-        args.Add("-out");
-        args.Add(outFile);
-        return args;
-    }
-
-    /// <summary>
-    /// Build the jsign argument list for Azure Trusted Signing. Internal + static so it
-    /// can be unit-tested offline. The token is referenced as <c>env:WT_TS_TOKEN</c> —
-    /// the actual value is set on the child process's environment, never an argument.
-    /// jsign auto-enables RFC3161 timestamping for Trusted Signing, so no <c>--tsaurl</c>.
-    /// </summary>
-    internal static List<string> BuildJsignArgs(string file, SigningOptions o)
-    {
-        var args = new List<string>
-        {
-            "--storetype", "TRUSTEDSIGNING",
-            "--keystore", NormalizeEndpoint(o.TrustedSigningEndpoint),
-            "--alias", $"{o.TrustedSigningAccount}/{o.TrustedSigningProfile}",
-            "--storepass", "env:" + TokenEnvVar,
-        };
-
-        if (!string.IsNullOrWhiteSpace(o.Description))
-        {
-            args.Add("--name");
-            args.Add(o.Description);
-        }
-        if (!string.IsNullOrWhiteSpace(o.Url))
-        {
-            args.Add("--url");
-            args.Add(o.Url);
-        }
-
-        args.Add(file);   // jsign signs the file in place
-        return args;
-    }
-
-    /// <summary>
-    /// jsign's <c>--keystore</c> for Trusted Signing wants the bare host (e.g.
-    /// <c>eus.codesigning.azure.net</c>) — it appends the REST path itself. Strip any
-    /// scheme and trailing slash so a portal "Account URI" (<c>https://…/</c>) pasted
-    /// verbatim doesn't produce a double-slash 404.
-    /// </summary>
-    private static string NormalizeEndpoint(string? endpoint)
-    {
-        var e = (endpoint ?? "").Trim();
-        if (e.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) e = e["https://".Length..];
-        else if (e.StartsWith("http://", StringComparison.OrdinalIgnoreCase)) e = e["http://".Length..];
-        return e.TrimEnd('/');
-    }
-
-    /// <summary>
-    /// Write the secret to a <c>0600</c> temp file for <c>-readpass</c>. The file is
-    /// created with owner-only permissions <i>before</i> the secret is written, and
-    /// the caller deletes it immediately after signing. Returns null when there is
-    /// no secret (the <c>-readpass</c> flag is then omitted entirely).
-    /// </summary>
-    private static string? WriteSecretFile(string? secret)
-    {
-        if (string.IsNullOrEmpty(secret)) return null;
-
-        var path = Path.Combine(Path.GetTempPath(), "wt-sign-" + Guid.NewGuid().ToString("N"));
-        using (new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-        {
-            // Lock down permissions on the empty file first, then write the secret.
-        }
-        if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-
-        File.WriteAllText(path, secret, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        return path;
-    }
-
-    private static void TryDelete(string path)
-    {
-        try { if (File.Exists(path)) File.Delete(path); }
-        catch { /* best-effort cleanup */ }
-    }
-
-    private static string Summarize(string stderr, string stdout)
-    {
-        var text = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
-        var line = text.Split('\n').Select(l => l.Trim()).LastOrDefault(l => l.Length > 0);
-        return string.IsNullOrEmpty(line) ? "osslsigncode failed (no diagnostic output)." : line;
-    }
+    private static string? NullIfBlank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s;
 }

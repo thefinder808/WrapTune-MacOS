@@ -2,9 +2,9 @@ namespace WrapTuneMacOS.Signing;
 
 /// <summary>
 /// The subset of accepted setup-file extensions that Authenticode can actually
-/// sign. <c>osslsigncode</c> signs PE images (<c>.exe</c>/<c>.dll</c>/<c>.sys</c>),
-/// Windows Installer databases (<c>.msi</c>), and the PowerShell script family
-/// (<c>.ps1</c>). Plain shell scripts (<c>.cmd</c>/<c>.bat</c>) are NOT
+/// sign: PE images (<c>.exe</c>/<c>.dll</c>/<c>.sys</c>), Windows Installer
+/// databases (<c>.msi</c>), and PowerShell scripts (<c>.ps1</c>) — the same set the
+/// MacSign engine implements. Plain shell scripts (<c>.cmd</c>/<c>.bat</c>) are NOT
 /// Authenticode-signable, so they are deliberately excluded here even though
 /// <c>WrapTuneMacOS.Packaging.InstallerExtensions</c> accepts them as setup files.
 /// </summary>
