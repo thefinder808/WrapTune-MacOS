@@ -5,7 +5,9 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using WrapTuneMacOS.Packaging;
+using WrapTuneMacOS.Services;
 using WrapTuneMacOS.Signing;
 
 namespace WrapTuneMacOS;
@@ -13,6 +15,7 @@ namespace WrapTuneMacOS;
 public partial class MainWindow : Window
 {
     private readonly IIntuneWinPackager _packager = new IntuneWinWriter();
+    private readonly UpdateService _updates = new();
     private string _theme = "Daylight";
     private CancellationTokenSource? _cts;
 
@@ -26,6 +29,7 @@ public partial class MainWindow : Window
         ApplyTheme(_theme);
         WireDragDrop();
         UpdateSigningUi();
+        Opened += (_, _) => StartLaunchUpdateCheck();
     }
 
     // ── Settings ────────────────────────────────────────────────────────────
@@ -57,27 +61,31 @@ public partial class MainWindow : Window
         SetSignExpanded(s.SignPayload);
     }
 
-    private void SaveCurrentSettings() => new AppSettings
+    private void SaveCurrentSettings()
     {
-        SourceFolder = TxtSourceFolder.Text,
-        SetupFile = TxtSetupFile.Text,
-        OutputFolder = TxtOutputFolder.Text,
-        Theme = _theme,
-        Overwrite = ChkOverwrite.IsChecked == true,
+        // Load-mutate-save: fields this window doesn't own (the updater's check
+        // stamp / skipped version) must survive a save.
+        var s = AppSettings.Load();
+        s.SourceFolder = TxtSourceFolder.Text;
+        s.SetupFile = TxtSetupFile.Text;
+        s.OutputFolder = TxtOutputFolder.Text;
+        s.Theme = _theme;
+        s.Overwrite = ChkOverwrite.IsChecked == true;
 
-        SignPayload = ChkSignPayload.IsChecked == true,
-        SignCertMode = CurrentCertMode().ToString(),
-        SignPfxPath = TxtPfxPath.Text,
-        SignPkcs11ModulePath = TxtPkcs11Module.Text,
-        SignPkcs11CertThumbprint = TxtPkcs11Thumbprint.Text,
-        SignTsEndpoint = TxtTsEndpoint.Text,
-        SignTsAccount = TxtTsAccount.Text,
-        SignTsProfile = TxtTsProfile.Text,
-        SignTimestampUrl = TxtTimestampUrl.Text,
-        SignDescription = TxtSignDescription.Text,
-        SignUrl = TxtSignUrl.Text,
-        SignAllFiles = ChkSignAllFiles.IsChecked == true,
-    }.Save();
+        s.SignPayload = ChkSignPayload.IsChecked == true;
+        s.SignCertMode = CurrentCertMode().ToString();
+        s.SignPfxPath = TxtPfxPath.Text;
+        s.SignPkcs11ModulePath = TxtPkcs11Module.Text;
+        s.SignPkcs11CertThumbprint = TxtPkcs11Thumbprint.Text;
+        s.SignTsEndpoint = TxtTsEndpoint.Text;
+        s.SignTsAccount = TxtTsAccount.Text;
+        s.SignTsProfile = TxtTsProfile.Text;
+        s.SignTimestampUrl = TxtTimestampUrl.Text;
+        s.SignDescription = TxtSignDescription.Text;
+        s.SignUrl = TxtSignUrl.Text;
+        s.SignAllFiles = ChkSignAllFiles.IsChecked == true;
+        s.Save();
+    }
 
     private CertMode CurrentCertMode() =>
         RbTrustedSigning.IsChecked == true ? CertMode.TrustedSigning
@@ -466,6 +474,124 @@ public partial class MainWindow : Window
         var path = files[0].Path.LocalPath;
         var isDir = Directory.Exists(path);
         return foldersOnly == isDir ? path : null;
+    }
+
+    // ── macOS menu bar ───────────────────────────────────────────────────────
+    // NativeMenuItem.Click is EventHandler-shaped, so thin wrappers adapt to the
+    // existing button handlers.
+
+    private void MenuBrowseSource(object? sender, EventArgs e) => BtnBrowseSource_Click(sender, new RoutedEventArgs());
+    private void MenuBrowseSetup(object? sender, EventArgs e) => BtnBrowseSetup_Click(sender, new RoutedEventArgs());
+    private void MenuBrowseOutput(object? sender, EventArgs e) => BtnBrowseOutput_Click(sender, new RoutedEventArgs());
+    private void MenuOpenOutput(object? sender, EventArgs e) => BtnOpenOutput_Click(sender, new RoutedEventArgs());
+
+    private void MenuPackage(object? sender, EventArgs e)
+    {
+        // The button disables itself during a run; the menu must honor that too.
+        if (BtnPackage.IsEnabled) BtnPackage_Click(sender, new RoutedEventArgs());
+    }
+
+    private TextBox? FocusedTextBox() => FocusManager?.GetFocusedElement() as TextBox;
+    private void OnEditCut(object? sender, EventArgs e) => FocusedTextBox()?.Cut();
+    private void OnEditCopy(object? sender, EventArgs e) => FocusedTextBox()?.Copy();
+    private void OnEditPaste(object? sender, EventArgs e) => FocusedTextBox()?.Paste();
+    private void OnEditSelectAll(object? sender, EventArgs e) => FocusedTextBox()?.SelectAll();
+
+    private void OnWindowMinimize(object? sender, EventArgs e) => WindowState = WindowState.Minimized;
+    private void OnWindowZoom(object? sender, EventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    private void OnHelpGitHub(object? sender, EventArgs e) => OpenUrl("https://github.com/thefinder808/WrapTune-MacOS");
+    private void OnHelpIssue(object? sender, EventArgs e) => OpenUrl("https://github.com/thefinder808/WrapTune-MacOS/issues/new");
+    private void OnHelpReleases(object? sender, EventArgs e) => OpenUrl("https://github.com/thefinder808/WrapTune-MacOS/releases");
+
+    private void OpenUrl(string url)
+    {
+        try { _ = Launcher.LaunchUriAsync(new Uri(url)); } catch { /* best-effort */ }
+    }
+
+    private Window? _aboutWindow;
+    private async void OnHelpAbout(object? sender, EventArgs e)
+    {
+        if (_aboutWindow is not null) { _aboutWindow.Activate(); return; }
+
+        var version = await UpdateService.CurrentVersionAsync() ?? "development build";
+        var link = new Button { Content = "github.com/thefinder808/WrapTune-MacOS", Background = Brushes.Transparent, Padding = new Thickness(0) };
+        link.Click += (_, _) => OpenUrl("https://github.com/thefinder808/WrapTune-MacOS");
+        _aboutWindow = new Window
+        {
+            Title = "About WrapTune",
+            Width = 360, SizeToContent = SizeToContent.Height, CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = Background,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(24), Spacing = 8,
+                Children =
+                {
+                    new TextBlock { Text = "WrapTune", FontSize = 18, FontWeight = FontWeight.Bold },
+                    new TextBlock { Text = $"Version {version}", FontSize = 12.5 },
+                    new TextBlock { Text = "Builds Microsoft Intune .intunewin packages on macOS.", FontSize = 12.5, TextWrapping = TextWrapping.Wrap },
+                    link,
+                },
+            },
+        };
+        _aboutWindow.Closed += (_, _) => _aboutWindow = null;
+        _aboutWindow.Show(this);
+    }
+
+    // ── Updates ──────────────────────────────────────────────────────────────
+
+    /// <summary>Fire-and-forget on-launch check, throttled to once a day. Errors are
+    /// never surfaced — background only.</summary>
+    private void StartLaunchUpdateCheck()
+    {
+        var s = AppSettings.Load();
+        if (!UpdateService.ShouldAutoCheck(s.LastUpdateCheckUtc, DateTime.UtcNow)) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var r = await _updates.CheckAsync(CancellationToken.None);
+                if (r.Error is not null) return;   // failed check → don't stamp; retry next launch
+
+                // Stamp the check time only on a successful check.
+                var latest = AppSettings.Load();
+                latest.LastUpdateCheckUtc = DateTime.UtcNow.ToString("o");
+                latest.Save();
+
+                if (r.UpdateAvailable && r.Info is not null && r.Info.Version != latest.SkippedUpdateVersion)
+                    Dispatcher.UIThread.Post(() => new UpdateWindow(r.Info, _updates).Show(this));
+            }
+            catch { /* background only */ }
+        });
+    }
+
+    /// <summary>Help → "Check for Updates…": always gives feedback — the update dialog
+    /// when one is available, otherwise the result in the status bar + log.</summary>
+    private async void OnCheckForUpdates(object? sender, EventArgs e)
+    {
+        SetStatus("Checking for updates…", "Accent");
+        var r = await _updates.CheckAsync(CancellationToken.None);
+
+        var skipped = AppSettings.Load().SkippedUpdateVersion;
+        if (r.UpdateAvailable && r.Info is not null)
+        {
+            // A manual check overrides a previously skipped version on purpose —
+            // the user is explicitly asking.
+            _ = skipped; // (kept for clarity; manual checks always show the dialog)
+            new UpdateWindow(r.Info, _updates).Show(this);
+            SetStatus($"Update {r.Info.Version} available.", "Accent");
+        }
+        else if (r.Error is not null)
+        {
+            AppendOutput("Update check: " + r.Error);
+            SetStatus("Couldn't check for updates — " + r.Error, "Error");
+        }
+        else
+        {
+            SetStatus("You're up to date.", "Success");
+        }
     }
 
     // ── Cleanup ───────────────────────────────────────────────────────────--

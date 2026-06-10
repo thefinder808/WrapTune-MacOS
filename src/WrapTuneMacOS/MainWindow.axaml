@@ -7,6 +7,57 @@
         Background="{DynamicResource WindowBg}"
         FontFamily="Inter" FontSize="13">
 
+    <!-- macOS menu bar. Avalonia only populates it when a NativeMenu is declared —
+         without this block the app shows just the bare app menu. -->
+    <NativeMenu.Menu>
+        <NativeMenu>
+            <NativeMenuItem Header="File">
+                <NativeMenuItem.Menu>
+                    <NativeMenu>
+                        <NativeMenuItem Header="Choose Source Folder…" Gesture="Meta+O" Click="MenuBrowseSource"/>
+                        <NativeMenuItem Header="Choose Setup File…" Gesture="Meta+Shift+O" Click="MenuBrowseSetup"/>
+                        <NativeMenuItem Header="Choose Output Folder…" Click="MenuBrowseOutput"/>
+                        <NativeMenuItemSeparator/>
+                        <NativeMenuItem Header="Package" Gesture="Meta+R" Click="MenuPackage"/>
+                        <NativeMenuItem Header="Open Output Folder" Click="MenuOpenOutput"/>
+                    </NativeMenu>
+                </NativeMenuItem.Menu>
+            </NativeMenuItem>
+            <NativeMenuItem Header="Edit">
+                <NativeMenuItem.Menu>
+                    <NativeMenu>
+                        <NativeMenuItem Header="Cut" Gesture="Meta+X" Click="OnEditCut"/>
+                        <NativeMenuItem Header="Copy" Gesture="Meta+C" Click="OnEditCopy"/>
+                        <NativeMenuItem Header="Paste" Gesture="Meta+V" Click="OnEditPaste"/>
+                        <NativeMenuItemSeparator/>
+                        <NativeMenuItem Header="Select All" Gesture="Meta+A" Click="OnEditSelectAll"/>
+                    </NativeMenu>
+                </NativeMenuItem.Menu>
+            </NativeMenuItem>
+            <NativeMenuItem Header="Window">
+                <NativeMenuItem.Menu>
+                    <NativeMenu>
+                        <NativeMenuItem Header="Minimize" Gesture="Meta+M" Click="OnWindowMinimize"/>
+                        <NativeMenuItem Header="Zoom" Click="OnWindowZoom"/>
+                    </NativeMenu>
+                </NativeMenuItem.Menu>
+            </NativeMenuItem>
+            <NativeMenuItem Header="Help">
+                <NativeMenuItem.Menu>
+                    <NativeMenu>
+                        <NativeMenuItem Header="WrapTune on GitHub" Click="OnHelpGitHub"/>
+                        <NativeMenuItem Header="Report an Issue" Click="OnHelpIssue"/>
+                        <NativeMenuItem Header="Release Notes" Click="OnHelpReleases"/>
+                        <NativeMenuItemSeparator/>
+                        <NativeMenuItem Header="Check for Updates…" Click="OnCheckForUpdates"/>
+                        <NativeMenuItemSeparator/>
+                        <NativeMenuItem Header="About WrapTune" Click="OnHelpAbout"/>
+                    </NativeMenu>
+                </NativeMenuItem.Menu>
+            </NativeMenuItem>
+        </NativeMenu>
+    </NativeMenu.Menu>
+
     <Window.Styles>
         <Style Selector="TextBlock.fieldLabel">
             <Setter Property="Foreground" Value="{DynamicResource Fg}"/>

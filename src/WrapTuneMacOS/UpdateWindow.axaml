@@ -1,0 +1,63 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="WrapTuneMacOS.UpdateWindow"
+        Title="Update Available"
+        Width="440" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBg}"
+        FontFamily="Inter" FontSize="13">
+
+    <Window.Styles>
+        <Style Selector="Button.primary">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Background" Value="{DynamicResource Accent}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentOn}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.quiet">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+    </Window.Styles>
+
+    <StackPanel Margin="24" Spacing="14">
+
+        <TextBlock x:Name="TxtTitle" FontSize="16" FontWeight="Bold"
+                   Foreground="{DynamicResource Fg}" TextWrapping="Wrap"/>
+
+        <ScrollViewer MaxHeight="220" HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <SelectableTextBlock x:Name="TxtNotes" FontSize="12.5"
+                                 Foreground="{DynamicResource Dim}" TextWrapping="Wrap"/>
+        </ScrollViewer>
+
+        <ProgressBar x:Name="Bar" IsVisible="False" Minimum="0" Maximum="1" Height="6"/>
+
+        <TextBlock x:Name="TxtUpdStatus" IsVisible="False" FontSize="12"
+                   Foreground="{DynamicResource Dim}" TextWrapping="Wrap"/>
+
+        <!-- Two right-aligned rows so the primary action can't be clipped on a
+             narrow fixed-width dialog: low-emphasis links on top, the decision
+             pair (Later / Install) below. -->
+        <StackPanel Spacing="8" Margin="0,4,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button Classes="quiet" Content="Release page ↗" Click="OnOpenReleasePage"/>
+                <Button Classes="quiet" Content="Skip this version" Click="OnSkip"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button x:Name="BtnLater" Classes="quiet" Content="Later" IsCancel="True" Click="OnLater"/>
+                <Button x:Name="BtnInstall" Classes="primary" Content="Install &amp; Relaunch"
+                        IsDefault="True" Click="OnInstall"/>
+            </StackPanel>
+        </StackPanel>
+
+    </StackPanel>
+</Window>
