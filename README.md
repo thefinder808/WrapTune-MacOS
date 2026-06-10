@@ -45,9 +45,9 @@ nowhere in the chain.
   property — the value Intune uses for the app's install behavior.
 - Drag-and-drop for the source folder and setup file.
 - **Optional Authenticode code-signing** of the payload before wrapping — sign
-  your `.exe`/`.msi`/`.ps1` from the Mac with a local cert (PFX or PKCS#11/HSM, via
-  `osslsigncode`) or **Azure Artifact Signing** — formerly Trusted Signing — (via `jsign`).
-  See [Signing the payload](#signing-the-payload-optional).
+  your `.exe`/`.msi`/`.ps1` from the Mac with a local cert (PFX or PKCS#11/HSM) or
+  **Azure Artifact Signing** — formerly Trusted Signing. Signing runs in-process;
+  nothing extra to install. See [Signing the payload](#signing-the-payload-optional).
 - Light / dark theme.
 - Signed **and notarized** universal release (Apple Silicon + Intel).
 
@@ -83,30 +83,23 @@ block, WDAC/AppLocker "signed only" policies), WrapTune can sign the payload —
 your `.exe`/`.msi`/`.ps1` — **before** it's wrapped, in one pass.
 
 This is a clean-room-friendly add-on: signing runs entirely **outside** the
-`.intunewin` engine (which stays zero-dependency and pure-managed), by shelling out
-to open-source signers — [`osslsigncode`](https://github.com/mtrojnar/osslsigncode)
-(the cross-platform equivalent of Windows `SignTool`) for local certificates, and
-[`jsign`](https://ebourg.github.io/jsign/) for Azure Artifact Signing.
+`.intunewin` engine (which stays zero-dependency and pure-managed), powered by the
+[MacSign signing engine](https://github.com/thefinder808/macsign) (Apache-2.0,
+same author) — a cross-platform Authenticode implementation whose releases are
+cross-verified by Windows `signtool` in CI. It runs **in-process**: no
+`osslsigncode`, no `jsign`, no JVM to install.
 
-**Prerequisite** — install the signer your cert needs (one-time):
-
-```bash
-brew install osslsigncode   # local certs: PFX / PKCS#11
-brew install jsign          # Azure Artifact Signing
-```
-
-Then open the **Code signing — optional** section and enable signing:
+Open the **Code signing — optional** section and enable signing:
 
 - **PFX / .p12** — point at a `.pfx` file and enter its password (for self-signed,
-  test, or legacy certificates). *(osslsigncode)*
-- **PKCS#11 token / HSM** — point at the vendor's PKCS#11 module and supply the
-  cert/key URIs and PIN (the form modern public OV/EV certificates take).
-  *(osslsigncode)*
+  test, or legacy certificates).
+- **PKCS#11 token / HSM** — point at the vendor's PKCS#11 module and enter the PIN
+  (the form modern public OV/EV certificates take); the key never leaves the token.
 - **Azure Artifact Signing** (formerly Trusted Signing) — enter your endpoint, account,
   and certificate profile. The short-lived access token is fetched automatically via the
-  Azure CLI (`az login`), or you can paste one. Timestamping is automatic. Your Azure
-  identity needs the **"Artifact Signing Certificate Profile Signer"** role on the account,
-  or signing returns 403. *(jsign)*
+  Azure CLI (`az login`), or you can paste one. Timestamping always happens (Microsoft's
+  TSA by default). Your Azure identity needs the **"Artifact Signing Certificate Profile
+  Signer"** role on the account, or signing returns 403.
 - Optional **RFC3161 timestamp URL** (PFX/PKCS#11 modes) so signatures stay valid
   after the cert expires.
 
@@ -160,7 +153,7 @@ Releasing (signing + notarization) is tag-driven via GitHub Actions; see
 
 ```
 src/WrapTuneMacOS.Packaging   The .intunewin engine (class library, no UI)
-src/WrapTuneMacOS.Signing     Optional payload Authenticode signing (osslsigncode wrapper)
+src/WrapTuneMacOS.Signing     Optional payload Authenticode signing (in-process MacSign engine)
 src/WrapTuneMacOS             Avalonia desktop UI
 tests/                        Engine + signing validation (round-trip, golden, MSI, sign-then-wrap)
 tools/verify-intunewin.py     Independent package verifier

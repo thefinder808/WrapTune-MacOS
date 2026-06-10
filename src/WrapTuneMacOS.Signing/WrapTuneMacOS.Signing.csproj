@@ -7,8 +7,20 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Tests exercise the osslsigncode argument builder and process runner directly. -->
+    <!-- Tests exercise the engine option mapping and process runner directly. -->
     <InternalsVisibleTo Include="WrapTuneMacOS.Signing.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The in-house MacSign Authenticode engine (github.com/thefinder808/macsign).
+         Core = PE + PowerShell formats with PFX signing; the backend packages add
+         MSI, PKCS#11 tokens, and Azure Trusted Signing. Signing happens in-process —
+         these replaced the osslsigncode/jsign shell-outs that v1.1.x required users
+         to brew-install. -->
+    <PackageReference Include="MacSign.Signing" Version="1.2.0" />
+    <PackageReference Include="MacSign.Signing.Msi" Version="1.2.0" />
+    <PackageReference Include="MacSign.Signing.Pkcs11" Version="1.2.0" />
+    <PackageReference Include="MacSign.Signing.Azure" Version="1.2.0" />
   </ItemGroup>
 
 </Project>

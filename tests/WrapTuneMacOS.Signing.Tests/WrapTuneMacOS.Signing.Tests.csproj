@@ -24,4 +24,10 @@
     <ProjectReference Include="..\..\src\WrapTuneMacOS.Packaging\WrapTuneMacOS.Packaging.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Tiny real MSI (msitools-generated, from the MacSign repo) for the
+         MSI-signing end-to-end test. -->
+    <Content Include="fixtures\test.msi" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

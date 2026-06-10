@@ -46,15 +46,13 @@ public partial class MainWindow : Window
         RbPfx.IsChecked = RbPkcs11.IsChecked != true && RbTrustedSigning.IsChecked != true;
         TxtPfxPath.Text = s.SignPfxPath;
         TxtPkcs11Module.Text = s.SignPkcs11ModulePath;
-        TxtPkcs11Cert.Text = s.SignPkcs11CertUri;
-        TxtKeyUri.Text = s.SignKeyUri;
+        TxtPkcs11Thumbprint.Text = s.SignPkcs11CertThumbprint;
         TxtTsEndpoint.Text = s.SignTsEndpoint;
         TxtTsAccount.Text = s.SignTsAccount;
         TxtTsProfile.Text = s.SignTsProfile;
         TxtTimestampUrl.Text = string.IsNullOrEmpty(s.SignTimestampUrl) ? DefaultTimestampUrl : s.SignTimestampUrl;
         TxtSignDescription.Text = s.SignDescription;
         TxtSignUrl.Text = s.SignUrl;
-        TxtOsslPath.Text = s.OsslsigncodePath;
         ChkSignAllFiles.IsChecked = s.SignAllFiles;
         SetSignExpanded(s.SignPayload);
     }
@@ -71,15 +69,13 @@ public partial class MainWindow : Window
         SignCertMode = CurrentCertMode().ToString(),
         SignPfxPath = TxtPfxPath.Text,
         SignPkcs11ModulePath = TxtPkcs11Module.Text,
-        SignPkcs11CertUri = TxtPkcs11Cert.Text,
-        SignKeyUri = TxtKeyUri.Text,
+        SignPkcs11CertThumbprint = TxtPkcs11Thumbprint.Text,
         SignTsEndpoint = TxtTsEndpoint.Text,
         SignTsAccount = TxtTsAccount.Text,
         SignTsProfile = TxtTsProfile.Text,
         SignTimestampUrl = TxtTimestampUrl.Text,
         SignDescription = TxtSignDescription.Text,
         SignUrl = TxtSignUrl.Text,
-        OsslsigncodePath = TxtOsslPath.Text,
         SignAllFiles = ChkSignAllFiles.IsChecked == true,
     }.Save();
 
@@ -194,21 +190,6 @@ public partial class MainWindow : Window
             TxtPkcs11Module.Text = f;
     }
 
-    private async void BtnCheckSigner_Click(object? sender, RoutedEventArgs e)
-    {
-        var version = await SignerLocator.TryGetVersionAsync(NullIfBlank(TxtOsslPath.Text));
-        if (version is null)
-        {
-            AppendOutput(SignerLocator.InstallHint);
-            SetStatus("Signer not found.", "Error");
-        }
-        else
-        {
-            AppendOutput("Found signer: " + version);
-            SetStatus("Signer ready.", "Success");
-        }
-    }
-
     private void BtnSignToggle_Click(object? sender, RoutedEventArgs e) => SetSignExpanded(!SignBody.IsVisible);
 
     private void SetSignExpanded(bool expanded)
@@ -228,24 +209,25 @@ public partial class MainWindow : Window
         PanelPfx.IsVisible = mode == CertMode.Pfx;
         PanelPkcs11.IsVisible = mode == CertMode.Pkcs11;
         PanelTrustedSigning.IsVisible = ts;
-        // Artifact Signing carries its token in its own panel and auto-timestamps,
-        // so the shared Password/PIN and Timestamp rows don't apply.
+        // Artifact Signing carries its token in its own panel, so the shared
+        // Password/PIN row doesn't apply. The Timestamp row stays: Artifact Signing
+        // certs are short-lived, so a blank URL means the Microsoft TSA, not "skip".
         RowSecret.IsVisible = !ts;
-        RowTimestamp.IsVisible = !ts;
+        TxtTimestampUrl.Watermark = ts
+            ? "Blank = Microsoft TSA (timestamp.acs.microsoft.com)"
+            : "RFC3161 timestamp server (blank to skip)";
         if (ts) UpdateTrustedSigningPrereqs();
     }
 
     /// <summary>
-    /// Walk the user through Azure Artifact Signing setup: live-check that jsign and
-    /// the Azure CLI are present, and flag the RBAC role they'll otherwise hit a 403 on.
+    /// Walk the user through Azure Artifact Signing setup: live-check the token
+    /// source, and flag the RBAC role they'll otherwise hit a 403 on. Signing itself
+    /// is in-process — the Azure CLI is the only (optional) external piece.
     /// </summary>
     private void UpdateTrustedSigningPrereqs()
     {
-        var hasJsign = SignerLocator.LocateJsign() is not null;
         var hasAz = SignerLocator.LocateAzureCli() is not null;
         TxtTsPrereq.Text =
-            (hasJsign ? "✓  jsign found"
-                      : "⚠  jsign not found — install it:  brew install jsign") + "\n" +
             (hasAz ? "✓  Azure CLI found — sign in first:  az login"
                    : "⚠  Azure CLI not found — install it and run  az login,  or paste a token below") + "\n" +
             "•  Your Azure identity needs the “Artifact Signing Certificate Profile Signer” role on the account (otherwise signing returns 403).";
@@ -264,8 +246,7 @@ public partial class MainWindow : Window
             CertMode = mode,
             PfxPath = NullIfBlank(TxtPfxPath.Text),
             Pkcs11ModulePath = NullIfBlank(TxtPkcs11Module.Text),
-            Pkcs11CertUri = NullIfBlank(TxtPkcs11Cert.Text),
-            KeyUri = NullIfBlank(TxtKeyUri.Text),
+            Pkcs11CertThumbprint = NullIfBlank(TxtPkcs11Thumbprint.Text),
             TrustedSigningEndpoint = NullIfBlank(TxtTsEndpoint.Text),
             TrustedSigningAccount = NullIfBlank(TxtTsAccount.Text),
             TrustedSigningProfile = NullIfBlank(TxtTsProfile.Text),
@@ -273,7 +254,6 @@ public partial class MainWindow : Window
             Description = NullIfBlank(TxtSignDescription.Text),
             Url = NullIfBlank(TxtSignUrl.Text),
             SignAllSignableFiles = ChkSignAllFiles.IsChecked == true,
-            OsslsigncodePath = NullIfBlank(TxtOsslPath.Text),
             Secret = secret,
         };
     }
@@ -301,8 +281,6 @@ public partial class MainWindow : Window
 
         if (RbTrustedSigning.IsChecked == true)
         {
-            if (SignerLocator.LocateJsign() is null)
-                return SignerLocator.JsignInstallHint;
             if (string.IsNullOrWhiteSpace(TxtTsEndpoint.Text))
                 return "Azure Trusted Signing endpoint is required.";
             if (string.IsNullOrWhiteSpace(TxtTsAccount.Text))
@@ -312,25 +290,17 @@ public partial class MainWindow : Window
             if (string.IsNullOrEmpty(TxtTsToken.Text) && SignerLocator.LocateAzureCli() is null)
                 return SignerLocator.AzureCliHint;
         }
+        else if (RbPkcs11.IsChecked == true)
+        {
+            if (string.IsNullOrWhiteSpace(TxtPkcs11Module.Text) || !File.Exists(TxtPkcs11Module.Text))
+                return "PKCS#11 module path is missing or does not exist.";
+        }
         else
         {
-            if (SignerLocator.Locate(NullIfBlank(TxtOsslPath.Text)) is null)
-                return SignerLocator.InstallHint;
-
-            if (RbPkcs11.IsChecked == true)
-            {
-                if (string.IsNullOrWhiteSpace(TxtPkcs11Module.Text) || !File.Exists(TxtPkcs11Module.Text))
-                    return "PKCS#11 module path is missing or does not exist.";
-                if (string.IsNullOrWhiteSpace(TxtKeyUri.Text))
-                    return "PKCS#11 key URI is required.";
-            }
-            else
-            {
-                if (string.IsNullOrWhiteSpace(TxtPfxPath.Text) || !File.Exists(TxtPfxPath.Text))
-                    return "Signing certificate (.pfx) is missing or does not exist.";
-                if (string.IsNullOrEmpty(TxtSecret.Text))
-                    return "The certificate password is required to sign.";
-            }
+            if (string.IsNullOrWhiteSpace(TxtPfxPath.Text) || !File.Exists(TxtPfxPath.Text))
+                return "Signing certificate (.pfx) is missing or does not exist.";
+            if (string.IsNullOrEmpty(TxtSecret.Text))
+                return "The certificate password is required to sign.";
         }
 
         if (ChkSignAllFiles.IsChecked != true && !SignableExtensions.IsSignable(TxtSetupFile.Text!))
