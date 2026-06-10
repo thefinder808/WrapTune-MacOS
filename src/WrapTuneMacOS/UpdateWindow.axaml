@@ -19,12 +19,29 @@
         </Style>
         <Style Selector="Button.quiet">
             <Setter Property="Height" Value="32"/>
-            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Padding" Value="16,0"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <!-- Low-emphasis text links (Release page / Skip): no border, so they recede
+             instead of competing with the Later / Install decision buttons. -->
+        <Style Selector="Button.link">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="6,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.link:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="Button.link:pointerover">
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
         </Style>
     </Window.Styles>
 
@@ -44,15 +61,16 @@
         <TextBlock x:Name="TxtUpdStatus" IsVisible="False" FontSize="12"
                    Foreground="{DynamicResource Dim}" TextWrapping="Wrap"/>
 
-        <!-- Two right-aligned rows so the primary action can't be clipped on a
-             narrow fixed-width dialog: low-emphasis links on top, the decision
-             pair (Later / Install) below. -->
-        <StackPanel Spacing="8" Margin="0,4,0,0">
-            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                <Button Classes="quiet" Content="Release page ↗" Click="OnOpenReleasePage"/>
-                <Button Classes="quiet" Content="Skip this version" Click="OnSkip"/>
+        <!-- Footer. The decision pair (Later / Install) is the only real button row.
+             Release page / Skip sit above as borderless text links so they recede
+             instead of reading as four crowded boxes. Two rows keep the primary
+             action from clipping on this narrow fixed-width dialog. -->
+        <StackPanel Spacing="6" Margin="0,6,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                <Button Classes="link" Content="Release page ↗" Click="OnOpenReleasePage"/>
+                <Button Classes="link" Content="Skip this version" Click="OnSkip"/>
             </StackPanel>
-            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
                 <Button x:Name="BtnLater" Classes="quiet" Content="Later" IsCancel="True" Click="OnLater"/>
                 <Button x:Name="BtnInstall" Classes="primary" Content="Install &amp; Relaunch"
                         IsDefault="True" Click="OnInstall"/>
