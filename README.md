@@ -49,6 +49,9 @@ nowhere in the chain.
   **Azure Artifact Signing** — formerly Trusted Signing. Signing runs in-process;
   nothing extra to install. See [Signing the payload](#signing-the-payload-optional).
 - Light / dark theme.
+- **In-app auto-updates** — checks GitHub Releases on launch (once a day) and from
+  **Help → Check for Updates…**, then one-click download → verify → install → relaunch.
+  Only a notarized, Developer-ID-signed build is ever installed.
 - Signed **and notarized** universal release (Apple Silicon + Intel).
 
 ![WrapTune in light theme](docs/images/light-mode.png)

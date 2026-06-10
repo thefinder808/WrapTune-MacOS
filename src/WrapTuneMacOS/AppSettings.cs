@@ -40,6 +40,13 @@ public sealed class AppSettings
     public string? SignTsAccount { get; set; }
     public string? SignTsProfile { get; set; }
 
+    // ── In-app updater ──
+    /// <summary>ISO-8601 stamp of the last successful update check; null = never.</summary>
+    public string? LastUpdateCheckUtc { get; set; }
+
+    /// <summary>Version the user chose to skip from the update dialog.</summary>
+    public string? SkippedUpdateVersion { get; set; }
+
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public static string GetSettingsPath()
