@@ -10,9 +10,18 @@ on:
 permissions:
   contents: read
 
+# A superseded run (new push to the same PR/branch) frees its macOS runner
+# immediately instead of finishing a build nobody will read.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: macos-latest
+    # A wedged test host otherwise squats on a macOS runner for GitHub's
+    # 6-hour default while everything else queues behind it.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -24,5 +33,19 @@ jobs:
       - name: Install osslsigncode (for signing tests)
         run: brew install osslsigncode
 
+      # blame-hang: if the run wedges, vstest names the running test, dumps,
+      # and fails within 8 minutes instead of hanging silently.
       - name: Test
-        run: dotnet test --configuration Release
+        run: >
+          dotnet test --configuration Release
+          --blame-hang --blame-hang-timeout 8m --blame-hang-dump-type mini
+
+      - name: Upload hang dumps
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-hang-diagnostics
+          path: |
+            **/TestResults/**/*.dmp
+            **/TestResults/**/Sequence_*.xml
+          if-no-files-found: ignore
