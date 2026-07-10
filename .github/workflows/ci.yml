@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+# A superseded run (new push to the same PR/branch) frees its macOS runner
+# immediately instead of finishing a build nobody will read.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: macos-latest

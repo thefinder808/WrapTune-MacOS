@@ -4,6 +4,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # One grouped PR per run instead of a PR per package — each PR costs a
+    # macos-latest CI job, and those runners have a low concurrency cap.
+    groups:
+      nuget-all:
+        patterns: ["*"]
+    open-pull-requests-limit: 3
     # Avalonia is deliberately pinned to the 11.x line — 12.x removes the
     # classic DragEventArgs.Data API and needs a deliberate migration.
     ignore:
@@ -14,3 +20,6 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions-all:
+        patterns: ["*"]
