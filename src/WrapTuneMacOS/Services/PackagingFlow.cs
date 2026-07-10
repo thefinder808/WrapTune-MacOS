@@ -1,7 +1,17 @@
 using System.Globalization;
 using WrapTuneMacOS.Packaging;
+using WrapTuneMacOS.Signing;
 
 namespace WrapTuneMacOS.Services;
+
+/// <summary>Where a window-wide drop should land.</summary>
+public enum DropKind
+{
+    SourceFolder,
+    OutputFolder,
+    SetupFile,
+    InspectPackage,
+}
 
 /// <summary>Stages shown in the packaging progress view, in execution order.
 /// Note: signing runs BEFORE zipping (the payload is signed in place, then
@@ -100,6 +110,26 @@ public static class PackagingFlow
         };
         return $"msi {msi.MsiProductCode} · {msi.MsiProductVersion} · {context}";
     }
+
+    /// <summary>Window-wide drop routing: folders fill the source (or the
+    /// output, when dropped straight onto its row); .intunewin files open the
+    /// inspector; any other file becomes the setup file.</summary>
+    public static DropKind ClassifyDrop(string path, bool isDirectory, bool overOutputRow)
+    {
+        if (isDirectory) return overOutputRow ? DropKind.OutputFolder : DropKind.SourceFolder;
+        return path.EndsWith(".intunewin", StringComparison.OrdinalIgnoreCase)
+            ? DropKind.InspectPackage
+            : DropKind.SetupFile;
+    }
+
+    /// <summary>Detail line for the completed Sign stage — mode-specific, so an
+    /// Azure run never shows a stale PFX filename.</summary>
+    public static string SignStageDetail(CertMode mode, string? pfxPath) => mode switch
+    {
+        CertMode.Pkcs11 => "hsm · timestamped",
+        CertMode.TrustedSigning => "azure · timestamped",
+        _ => $"{Path.GetFileName(pfxPath ?? "")} · timestamped",
+    };
 
     /// <summary>Bar fraction: completed stages plus progress inside the active
     /// one, out of the visible stage count.</summary>

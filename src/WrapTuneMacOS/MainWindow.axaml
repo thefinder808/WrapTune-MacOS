@@ -350,7 +350,7 @@
                                    Foreground="{DynamicResource Fg}" LetterSpacing="-0.19"/>
                         <TextBlock x:Name="TxtSubtitleEmpty" Margin="0,4,0,0" FontSize="13"
                                    Foreground="{DynamicResource Dim}">
-                            <Run Text="Folder in, "/><Run FontFamily="{StaticResource MonoFont}" FontSize="12" Foreground="{DynamicResource AccentLink}" Text=".intunewin"/><Run Text=" out — three steps."/>
+                            <Run Text="Folder in, "/><Run FontFamily="{StaticResource MonoFont}" FontSize="12" Foreground="{DynamicResource AccentLink}" Text=".intunewin"/><Run Text=" out."/>
                         </TextBlock>
                         <TextBlock x:Name="TxtSubtitleReady" Margin="0,4,0,0" FontSize="13"
                                    Foreground="{DynamicResource Dim}" Text="Review, sign, package."
@@ -522,17 +522,6 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Step 3 · Package -->
-                        <Border x:Name="Card3" Classes="card preview" Margin="0,8,0,0" MinHeight="46">
-                            <Grid ColumnDefinitions="Auto,Auto,*" Margin="16,0" MinHeight="46">
-                                <Border Classes="badge" VerticalAlignment="Center">
-                                    <TextBlock Text="3"/>
-                                </Border>
-                                <TextBlock Grid.Column="1" Classes="stepTitle" Text="Package" Margin="10,0,0,0"/>
-                                <TextBlock x:Name="TxtPackageHint" Grid.Column="2" Classes="monoHint"
-                                           HorizontalAlignment="Right" Text="→ output.intunewin"/>
-                            </Grid>
-                        </Border>
                     </StackPanel>
 
                     <!-- ═══ Packaging state ═══ -->
@@ -590,14 +579,22 @@
             <Border Grid.Row="1" BorderBrush="{DynamicResource HairlineSoft}" BorderThickness="0,1,0,0"
                     Padding="0,16,0,0">
                 <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                    <!-- Grid (not StackPanel): the status cell must have a bounded
+                         width or CharacterEllipsis never engages and long text
+                         runs under the footer buttons. -->
+                    <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center" Margin="0,0,14,0">
                         <Button x:Name="BtnRawLog" Classes="link mono" Content="raw log ▾"
-                                IsVisible="False" Click="BtnRawLog_Click"/>
-                        <TextBlock x:Name="TxtStatus" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                                IsVisible="False" Click="BtnRawLog_Click" Margin="0,0,14,0"/>
+                        <TextBlock x:Name="TxtStatus" Grid.Column="1"
+                                   FontFamily="{StaticResource MonoFont}" FontSize="11.5"
                                    Foreground="{DynamicResource Dimmer}" VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis" Text="0 of 3 paths set"/>
-                    </StackPanel>
+                    </Grid>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                        <!-- Output preview lives here since the step-3 row was cut:
+                             the info survives, the action keeps its single home. -->
+                        <TextBlock x:Name="TxtPackageHint" Classes="monoHint" IsVisible="False"
+                                   Margin="0,0,4,0" Text="→ output.intunewin"/>
                         <Border x:Name="KbdChip" Classes="kbd" IsVisible="False">
                             <TextBlock Text="⌘R"/>
                         </Border>

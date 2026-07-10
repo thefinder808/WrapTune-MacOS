@@ -437,11 +437,10 @@ public partial class MainWindow : Window
         Step2Badge.Classes.Set("active", signingOn);
         TxtSignHint.IsVisible = !signingOn;
 
-        // Step 3 preview wakes up once everything upstream is satisfied.
-        Card3.Classes.Set("preview", !allValid);
-        TxtPackageHint.Text = ready && !string.IsNullOrWhiteSpace(TxtSetupFile.Text)
-            ? $"→ {Path.GetFileNameWithoutExtension(TxtSetupFile.Text)}.intunewin"
-            : "→ output.intunewin";
+        // Output preview appears in the footer once there's something to show.
+        TxtPackageHint.IsVisible = ready && !string.IsNullOrWhiteSpace(TxtSetupFile.Text);
+        if (TxtPackageHint.IsVisible)
+            TxtPackageHint.Text = $"→ {Path.GetFileNameWithoutExtension(TxtSetupFile.Text)}.intunewin";
 
         BtnPackage.IsEnabled = allValid;
         KbdChip.IsVisible = allValid;
@@ -543,14 +542,22 @@ public partial class MainWindow : Window
             if (signing)
             {
                 ActivateStage(PackageStage.Sign);
-                var options = BuildSigningOptions();
-                var signer = PayloadSigner.TryCreate(options, out var locateError);
-                if (signer is null) { FailRun(PackageStage.Sign, locateError!); return; }
+                var options = BuildSigningOptions();   // reads controls — must stay on the UI thread
 
-                var signed = await signer.SignAsync(source, setup, options, progress, _cts.Token);
+                // Task.Run for the same reason PackageAsync uses it internally:
+                // the in-process signing engine does synchronous crypto and
+                // network work (Azure endpoint, TSA) before/without yielding,
+                // which beachballs the UI thread if called from it.
+                var ct = _cts.Token;
+                var signed = await Task.Run(async () =>
+                {
+                    var signer = PayloadSigner.TryCreate(options, out var locateError);
+                    if (signer is null) return SignResult.Fail(locateError!);
+                    return await signer.SignAsync(source, setup, options, progress, ct);
+                });
+
                 if (!signed.Success) { FailRun(PackageStage.Sign, signed.Error!); return; }
-                SetStageDone(PackageStage.Sign,
-                    $"{Path.GetFileName(TxtPfxPath.Text ?? "")}{(CurrentCertMode() == CertMode.Pfx ? " · " : "")}timestamped");
+                SetStageDone(PackageStage.Sign, PackagingFlow.SignStageDetail(CurrentCertMode(), TxtPfxPath.Text));
             }
 
             var request = new PackageRequest(source, setup, output, ChkOverwrite.IsChecked == true);
@@ -644,6 +651,7 @@ public partial class MainWindow : Window
         BtnPackage.IsVisible = false;
         BtnOpenOutput.IsVisible = false;
         KbdChip.IsVisible = false;
+        TxtPackageHint.IsVisible = false;
         BtnCancel.IsVisible = true;
         BtnCancel.IsEnabled = true;
         BtnRawLog.IsVisible = true;
@@ -744,8 +752,9 @@ public partial class MainWindow : Window
         BtnCancel.IsVisible = false;
         BtnNewPackage.IsVisible = true;
         BtnOpenOutput.IsVisible = true;
-        BtnPackage.IsVisible = true;
-        BtnPackage.IsEnabled = true;
+        // No Package button here: after success it would invite an accidental
+        // re-run; "← new package" returns to the (still-filled) form instead.
+        BtnPackage.IsVisible = false;
         AppendOutput("Package created successfully!");
         SetStatus($"done — {Path.GetFileName(outputPath)} created", "Success");
     }
@@ -962,18 +971,23 @@ public partial class MainWindow : Window
 
     private void OnWindowDrop(object? sender, DragEventArgs e)
     {
-        if (_running || GetDropPath(e) is not { } path) return;
+        if (GetDropPath(e) is not { } path) return;
 
-        if (Directory.Exists(path))
+        switch (PackagingFlow.ClassifyDrop(path, Directory.Exists(path), IsWithin(e, RowOutput)))
         {
-            // A folder dropped straight onto the output row retargets output;
-            // anywhere else it's the source (the design's headline gesture).
-            if (IsWithin(e, RowOutput)) TxtOutputFolder.Text = path;
-            else ApplySourceFolder(path);
-        }
-        else
-        {
-            TxtSetupFile.Text = path;
+            case DropKind.InspectPackage:
+                // Inspecting is read-only, so it's fine even mid-run.
+                new InspectWindow(path).Show(this);
+                break;
+            case DropKind.OutputFolder when !_running:
+                TxtOutputFolder.Text = path;
+                break;
+            case DropKind.SourceFolder when !_running:
+                ApplySourceFolder(path);
+                break;
+            case DropKind.SetupFile when !_running:
+                TxtSetupFile.Text = path;
+                break;
         }
         e.Handled = true;
     }
@@ -983,7 +997,8 @@ public partial class MainWindow : Window
 
     private static string? GetDropPath(DragEventArgs e)
     {
-        var files = e.Data.GetFiles()?.ToArray();
+        // DataTransfer is the Avalonia 12 API (Data is obsolete on 11.3).
+        var files = e.DataTransfer.TryGetFiles()?.ToArray();
         return files is { Length: 1 } ? files[0].Path.LocalPath : null;
     }
 
