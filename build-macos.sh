@@ -98,7 +98,11 @@ cleanup_dmg() {
     hdiutil detach "$MOUNT" >/dev/null 2>&1 || true
     rm -rf "$STAGE" "$RWDMG"
 }
-trap cleanup_dmg RETURN 2>/dev/null || true
+# EXIT, not RETURN: a RETURN trap never fires at the top level of an executed
+# script, so it was a no-op safety net. INT/TERM route through exit so an
+# interrupted build also unmounts and cleans up.
+trap cleanup_dmg EXIT
+trap 'exit 130' INT TERM
 
 rm -rf "$STAGE"; mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"

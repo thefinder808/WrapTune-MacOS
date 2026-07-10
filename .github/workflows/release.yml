@@ -70,6 +70,13 @@ jobs:
           RID=osx-arm64 ./build-macos.sh
           RID=osx-x64   ./build-macos.sh
 
+      # Lets a downloader (and the future us) verify an asset is the exact bytes
+      # this workflow run produced.
+      - name: Checksums
+        run: |
+          cd dist
+          shasum -a 256 *.dmg | tee checksums.txt
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -77,4 +84,4 @@ jobs:
         run: |
           gh release view "$TAG" >/dev/null 2>&1 \
             || gh release create "$TAG" --title "$TAG" --generate-notes
-          gh release upload "$TAG" dist/*.dmg --clobber
+          gh release upload "$TAG" dist/*.dmg dist/checksums.txt --clobber
