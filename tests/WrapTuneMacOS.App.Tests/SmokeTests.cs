@@ -74,13 +74,27 @@ public sealed class SmokeTests
     [AvaloniaFact]
     public void Theme_variant_matches_the_saved_setting()
     {
-        var w = new MainWindow();
-        w.Show();
+        // Hermetic: sandbox the settings instead of reading whatever the real
+        // (or another test's) settings happen to say — the CI flake of
+        // 2026-07-10 was this test racing AppSettingsTests over the static
+        // BaseDirOverride and losing.
+        var dir = Path.Combine(Path.GetTempPath(), "wraptune-theme-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        AppSettings.BaseDirOverride = dir;
+        try
+        {
+            new AppSettings { Theme = "Midnight" }.Save();
+            new MainWindow().Show();
+            Assert.Equal(ThemeVariant.Dark, Application.Current!.RequestedThemeVariant);
 
-        // The window applies the persisted theme on load (menu Window → Toggle
-        // Theme flips it); whatever settings said must be what's active.
-        var expectDark = AppSettings.Load().Theme == "Midnight";
-        Assert.Equal(expectDark ? ThemeVariant.Dark : ThemeVariant.Light,
-            Application.Current!.RequestedThemeVariant);
+            new AppSettings { Theme = "Daylight" }.Save();
+            new MainWindow().Show();
+            Assert.Equal(ThemeVariant.Light, Application.Current!.RequestedThemeVariant);
+        }
+        finally
+        {
+            AppSettings.BaseDirOverride = null;
+            try { Directory.Delete(dir, recursive: true); } catch { /* best effort */ }
+        }
     }
 }
