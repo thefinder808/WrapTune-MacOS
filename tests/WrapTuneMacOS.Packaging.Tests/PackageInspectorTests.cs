@@ -69,6 +69,18 @@ public sealed class PackageInspectorTests
         Assert.Equal("fake installer payload"u8.ToArray(), entries["setup.exe"]);
     }
 
+    [Fact]
+    public void TryReadMsiInfo_returns_null_for_a_file_that_is_not_an_msi()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "wraptune-notmsi-" + Guid.NewGuid().ToString("N") + ".msi");
+        File.WriteAllText(path, "definitely not an OLE2 compound file");
+        try
+        {
+            Assert.Null(PackageInspector.TryReadMsiInfo(path));
+        }
+        finally { File.Delete(path); }
+    }
+
     private static void TamperLastContentByte(string src, string dest)
     {
         const string contentsEntry = "IntuneWinPackage/Contents/" + IntuneWinWriter.ContentFileName;

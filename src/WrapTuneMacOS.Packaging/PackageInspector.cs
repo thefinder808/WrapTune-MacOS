@@ -67,6 +67,11 @@ public static class PackageInspector
     public static IntuneWinFileContents ExtractPayloadZip(string intuneWinPath, string destZipPath)
         => IntuneWinReader.ReadToFile(intuneWinPath, destZipPath);
 
+    /// <summary>Read an MSI's metadata without packaging it (the UI shows a
+    /// readout as soon as an .msi setup file is picked). Null when the file
+    /// isn't a parseable MSI — mirrors the engine's own tolerant behavior.</summary>
+    public static MsiInfo? TryReadMsiInfo(string msiPath) => Msi.MsiPropertyReader.TryRead(msiPath);
+
     private static long EncryptedEntryLength(string intuneWinPath)
     {
         using var zip = ZipFile.OpenRead(intuneWinPath);
