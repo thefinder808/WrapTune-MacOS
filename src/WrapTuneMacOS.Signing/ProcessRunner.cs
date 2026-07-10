@@ -7,13 +7,15 @@ namespace WrapTuneMacOS.Signing;
 /// Runs an external process and captures its output. Arguments are passed via
 /// <see cref="ProcessStartInfo.ArgumentList"/> (never a shell command line), so
 /// paths with spaces and shell metacharacters cannot be misinterpreted or
-/// injected.
+/// injected. A cancelled or timed-out run kills the child process tree —
+/// disposing a <see cref="Process"/> only releases handles, it never
+/// terminates the OS process.
 /// </summary>
 internal static class ProcessRunner
 {
     public static async Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(
         string fileName, IReadOnlyList<string> args, CancellationToken ct = default,
-        IReadOnlyDictionary<string, string>? environment = null)
+        TimeSpan? timeout = null)
     {
         var psi = new ProcessStartInfo
         {
@@ -25,12 +27,6 @@ internal static class ProcessRunner
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
 
-        // Extra env vars apply only to this child process. Used to pass secrets
-        // (e.g. an Azure token via `--storepass env:VAR`) without exposing them in
-        // the argument list, which is visible to other local users via `ps`.
-        if (environment is not null)
-            foreach (var (k, v) in environment) psi.Environment[k] = v;
-
         using var proc = new Process { StartInfo = psi };
         var stdout = new StringBuilder();
         var stderr = new StringBuilder();
@@ -40,7 +36,20 @@ internal static class ProcessRunner
         proc.Start();
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
-        await proc.WaitForExitAsync(ct);
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        if (timeout is { } t) linked.CancelAfter(t);
+        try
+        {
+            await proc.WaitForExitAsync(linked.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            try { proc.Kill(entireProcessTree: true); } catch { /* already exited */ }
+            ct.ThrowIfCancellationRequested();   // caller-initiated cancel → propagate
+            throw new TimeoutException(
+                $"{Path.GetFileName(fileName)} did not finish within {timeout!.Value.TotalSeconds:0} seconds.");
+        }
 
         return (proc.ExitCode, stdout.ToString(), stderr.ToString());
     }
