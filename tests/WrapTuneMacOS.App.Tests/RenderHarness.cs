@@ -28,13 +28,23 @@ public sealed class RenderHarness
         {
             new AppSettings { Theme = "Midnight" }.Save();   // only Midnight is designed
 
-            // demo payload: a folder with a few files and a nested dir
+            // demo payload: a folder with a few files and a nested dir. Random
+            // (incompressible) bytes so the zip stage takes long enough for the
+            // mid-run capture to actually catch the run in flight.
             var src = Path.Combine(sandbox, "wraptune");
             Directory.CreateDirectory(Path.Combine(src, "assets"));
-            File.WriteAllBytes(Path.Combine(src, "Remediate-WindowsPatchHealth.msi"), new byte[24 * 1024 * 1024]);
-            File.WriteAllBytes(Path.Combine(src, "assets", "banner.png"), new byte[6 * 1024 * 1024]);
+            var big = new byte[24 * 1024 * 1024];
+            Random.Shared.NextBytes(big);
+            File.WriteAllBytes(Path.Combine(src, "Remediate-WindowsPatchHealth.msi"), big);
+            var medium = new byte[6 * 1024 * 1024];
+            Random.Shared.NextBytes(medium);
+            File.WriteAllBytes(Path.Combine(src, "assets", "banner.png"), medium);
             for (int i = 1; i <= 4; i++)
-                File.WriteAllBytes(Path.Combine(src, $"support-{i}.dll"), new byte[2 * 1024 * 1024]);
+            {
+                var dll = new byte[2 * 1024 * 1024];
+                Random.Shared.NextBytes(dll);
+                File.WriteAllBytes(Path.Combine(src, $"support-{i}.dll"), dll);
+            }
             var outFolder = Path.Combine(sandbox, "Scratch");
             Directory.CreateDirectory(outFolder);
 
@@ -70,6 +80,8 @@ public sealed class RenderHarness
             Pump(TimeSpan.FromMilliseconds(400));
             var btn = w.FindControl<Button>("BtnPackage")!;
             btn.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Pump(TimeSpan.FromMilliseconds(120));   // catch the run mid-flight
+            Capture(w, outDir, "state3-running.png");
             var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
             while (DateTime.UtcNow < deadline &&
                    w.FindControl<TextBlock>("TxtPercent")!.Text != "Done")

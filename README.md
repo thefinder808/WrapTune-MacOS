@@ -43,7 +43,13 @@ nowhere in the chain.
 - Automatic **MSI metadata** extraction, including install context
   (per-machine / per-user / dual-purpose) derived from the MSI's `ALLUSERS`
   property — the value Intune uses for the app's install behavior.
-- Drag-and-drop for the source folder and setup file.
+- **One-screen, three-step flow** (v2.0): grouped Files card with derived values
+  (setup auto-detected, output defaulted, MSI metadata readout, live file
+  count/size), signing folded in as step 2, and a **staged progress view**
+  (per-stage checkmarks, live percent, elapsed time) with the raw engine log a
+  click away.
+- **Whole-window drag-and-drop** — drop a folder anywhere to set the source,
+  drop an installer to set the setup file, drop a `.intunewin` to inspect it.
 - **Optional Authenticode code-signing** of the payload before wrapping — sign
   your `.exe`/`.msi`/`.ps1` from the Mac with a local cert (PFX or PKCS#11/HSM) or
   **Azure Artifact Signing** — formerly Trusted Signing. Signing runs in-process;
@@ -77,16 +83,19 @@ build is notarized, Gatekeeper accepts it without the right-click-Open workaroun
 1. **Source folder** — the folder containing your installer and any supporting files.
 2. **Setup file** — the installer within that folder (`.exe`, `.msi`, `.ps1`, …).
 3. **Output folder** — where the `.intunewin` is written.
-4. Click **Package**, then upload the result in the Intune admin center as a
-   **Windows app (Win32)**.
+4. Click **Package** (⌘R) — a staged progress view tracks sign → zip → encrypt →
+   assemble, with the raw engine log behind the *raw log* disclosure — then
+   upload the result in the Intune admin center as a **Windows app (Win32)**.
+
+![WrapTune's staged packaging progress](docs/images/packaging.png)
 
 For `.msi` setup files, the package includes the MSI metadata Intune reads to
 pre-fill the product code (e.g. the uninstall command) and the install behavior.
 
-To audit an existing package — yours or anyone's — use **File → Inspect
-Package…** (⌘I): it shows the recorded metadata, verifies the HMAC, digest, and
-size exactly the way Intune's client would, lists the payload's files, and can
-save the decrypted payload zip.
+To audit an existing package — yours or anyone's — drop a `.intunewin` anywhere
+on the window, or use **File → Inspect Package…** (⌘I): it shows the recorded
+metadata, verifies the HMAC, digest, and size exactly the way Intune's client
+would, lists the payload's files, and can save the decrypted payload zip.
 
 ## Signing the payload (optional)
 
@@ -102,7 +111,8 @@ same author) — a cross-platform Authenticode implementation whose releases are
 cross-verified by Windows `signtool` in CI. It runs **in-process**: no
 `osslsigncode`, no `jsign`, no JVM to install.
 
-Open the **Code signing — optional** section and enable signing:
+Flip the **Sign payload** switch (step 2 of the flow) and pick a mode from the
+segmented control:
 
 - **PFX / .p12** — point at a `.pfx` file and enter its password (for self-signed,
   test, or legacy certificates).
@@ -147,12 +157,14 @@ instructions: [`docs/CLI.md`](docs/CLI.md).
 
 ## How it differs from the Windows WrapTune
 
-The macOS window is intentionally simpler: there's **no "IntuneWinAppUtil.exe
+The macOS app is intentionally simpler: there's **no "IntuneWinAppUtil.exe
 path"** field (the engine is built in) and **no Catalog folder** field (the
-official tool's `-a` Win10-S-mode catalog signing isn't reimplemented). Fields:
-Source folder, Setup file, Output folder, Overwrite, theme toggle, Package,
-output log — plus an optional **Code signing** section (see above) that the
-Windows tool delegates to a separate signing step.
+official tool's `-a` Win10-S-mode catalog signing isn't reimplemented). Since
+v2.0 the window is a single three-step flow — a grouped **Files** card
+(source / setup / output / overwrite), an optional **Sign payload** step (see
+above) that the Windows tool delegates to a separate signing tool, and one
+**Package** action with a staged progress view. Light/dark theme lives under
+**Window → Toggle Theme** (⌘T).
 
 ## Verifying a package
 
