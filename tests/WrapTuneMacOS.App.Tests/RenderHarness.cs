@@ -31,7 +31,7 @@ public sealed class RenderHarness
             // demo payload: a folder with a few files and a nested dir
             var src = Path.Combine(sandbox, "wraptune");
             Directory.CreateDirectory(Path.Combine(src, "assets"));
-            File.WriteAllBytes(Path.Combine(src, "WrapTune.msi"), new byte[24 * 1024 * 1024]);
+            File.WriteAllBytes(Path.Combine(src, "Remediate-WindowsPatchHealth.msi"), new byte[24 * 1024 * 1024]);
             File.WriteAllBytes(Path.Combine(src, "assets", "banner.png"), new byte[6 * 1024 * 1024]);
             for (int i = 1; i <= 4; i++)
                 File.WriteAllBytes(Path.Combine(src, $"support-{i}.dll"), new byte[2 * 1024 * 1024]);
@@ -48,7 +48,7 @@ public sealed class RenderHarness
             var pfx = Path.Combine(sandbox, "contoso-ov.pfx");
             File.WriteAllBytes(pfx, new byte[64]);
             w.FindControl<TextBox>("TxtSourceFolder")!.Text = src;
-            w.FindControl<TextBox>("TxtSetupFile")!.Text = Path.Combine(src, "WrapTune.msi");
+            w.FindControl<TextBox>("TxtSetupFile")!.Text = Path.Combine(src, "Remediate-WindowsPatchHealth.msi");
             w.FindControl<TextBox>("TxtOutputFolder")!.Text = outFolder;
             w.FindControl<ToggleSwitch>("ChkSignPayload")!.IsChecked = true;
             w.FindControl<TextBox>("TxtPfxPath")!.Text = pfx;

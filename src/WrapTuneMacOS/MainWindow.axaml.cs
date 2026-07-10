@@ -549,8 +549,7 @@ public partial class MainWindow : Window
 
                 var signed = await signer.SignAsync(source, setup, options, progress, _cts.Token);
                 if (!signed.Success) { FailRun(PackageStage.Sign, signed.Error!); return; }
-                SetStageDone(PackageStage.Sign,
-                    $"{Path.GetFileName(TxtPfxPath.Text ?? "")}{(CurrentCertMode() == CertMode.Pfx ? " · " : "")}timestamped");
+                SetStageDone(PackageStage.Sign, PackagingFlow.SignStageDetail(CurrentCertMode(), TxtPfxPath.Text));
             }
 
             var request = new PackageRequest(source, setup, output, ChkOverwrite.IsChecked == true);
@@ -962,18 +961,23 @@ public partial class MainWindow : Window
 
     private void OnWindowDrop(object? sender, DragEventArgs e)
     {
-        if (_running || GetDropPath(e) is not { } path) return;
+        if (GetDropPath(e) is not { } path) return;
 
-        if (Directory.Exists(path))
+        switch (PackagingFlow.ClassifyDrop(path, Directory.Exists(path), IsWithin(e, RowOutput)))
         {
-            // A folder dropped straight onto the output row retargets output;
-            // anywhere else it's the source (the design's headline gesture).
-            if (IsWithin(e, RowOutput)) TxtOutputFolder.Text = path;
-            else ApplySourceFolder(path);
-        }
-        else
-        {
-            TxtSetupFile.Text = path;
+            case DropKind.InspectPackage:
+                // Inspecting is read-only, so it's fine even mid-run.
+                new InspectWindow(path).Show(this);
+                break;
+            case DropKind.OutputFolder when !_running:
+                TxtOutputFolder.Text = path;
+                break;
+            case DropKind.SourceFolder when !_running:
+                ApplySourceFolder(path);
+                break;
+            case DropKind.SetupFile when !_running:
+                TxtSetupFile.Text = path;
+                break;
         }
         e.Handled = true;
     }

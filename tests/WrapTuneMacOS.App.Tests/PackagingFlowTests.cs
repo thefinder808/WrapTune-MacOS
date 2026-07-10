@@ -1,5 +1,6 @@
 using WrapTuneMacOS.Packaging;
 using WrapTuneMacOS.Services;
+using WrapTuneMacOS.Signing;
 
 namespace WrapTuneMacOS.UiTests;
 
@@ -90,6 +91,26 @@ public sealed class PackagingFlowTests
 
         Assert.Equal("msi {X} · 2.0 · dual-purpose",
             PackagingFlow.MsiReadout(new MsiInfo { MsiProductCode = "{X}", MsiProductVersion = "2.0", MsiExecutionContext = 2 }));
+    }
+
+    [Theory]
+    [InlineData("/x/folder", true, false, DropKind.SourceFolder)]
+    [InlineData("/x/folder", true, true, DropKind.OutputFolder)]
+    [InlineData("/x/setup.msi", false, false, DropKind.SetupFile)]
+    [InlineData("/x/app.intunewin", false, false, DropKind.InspectPackage)]
+    [InlineData("/x/APP.INTUNEWIN", false, true, DropKind.InspectPackage)]
+    public void Window_drops_route_by_what_was_dropped(string path, bool isDir, bool overOutput, DropKind expected)
+        => Assert.Equal(expected, PackagingFlow.ClassifyDrop(path, isDir, overOutput));
+
+    [Fact]
+    public void Sign_stage_detail_reflects_the_mode_not_a_stale_pfx_path()
+    {
+        Assert.Equal("contoso-ov.pfx · timestamped",
+            PackagingFlow.SignStageDetail(CertMode.Pfx, "/certs/contoso-ov.pfx"));
+        Assert.Equal("hsm · timestamped",
+            PackagingFlow.SignStageDetail(CertMode.Pkcs11, "/certs/contoso-ov.pfx"));
+        Assert.Equal("azure · timestamped",
+            PackagingFlow.SignStageDetail(CertMode.TrustedSigning, "/certs/leftover.pfx"));
     }
 
     [Fact]

@@ -590,13 +590,17 @@
             <Border Grid.Row="1" BorderBrush="{DynamicResource HairlineSoft}" BorderThickness="0,1,0,0"
                     Padding="0,16,0,0">
                 <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                    <!-- Grid (not StackPanel): the status cell must have a bounded
+                         width or CharacterEllipsis never engages and long text
+                         runs under the footer buttons. -->
+                    <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center" Margin="0,0,14,0">
                         <Button x:Name="BtnRawLog" Classes="link mono" Content="raw log ▾"
-                                IsVisible="False" Click="BtnRawLog_Click"/>
-                        <TextBlock x:Name="TxtStatus" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                                IsVisible="False" Click="BtnRawLog_Click" Margin="0,0,14,0"/>
+                        <TextBlock x:Name="TxtStatus" Grid.Column="1"
+                                   FontFamily="{StaticResource MonoFont}" FontSize="11.5"
                                    Foreground="{DynamicResource Dimmer}" VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis" Text="0 of 3 paths set"/>
-                    </StackPanel>
+                    </Grid>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
                         <Border x:Name="KbdChip" Classes="kbd" IsVisible="False">
                             <TextBlock Text="⌘R"/>
