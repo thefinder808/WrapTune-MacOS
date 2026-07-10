@@ -9,42 +9,74 @@
 
     <Application.Resources>
         <ResourceDictionary>
+
+            <!-- Embedded OFL fonts (Assets/Fonts). Space Grotesk carries the UI,
+                 JetBrains Mono carries values/paths/hints — per the flow redesign. -->
+            <FontFamily x:Key="UiFont">avares://WrapTuneMacOS/Assets/Fonts#Space Grotesk</FontFamily>
+            <FontFamily x:Key="MonoFont">avares://WrapTuneMacOS/Assets/Fonts#JetBrains Mono</FontFamily>
+
             <ResourceDictionary.ThemeDictionaries>
 
-                <!-- Daylight (light) — ported from WrapTune/Themes/Daylight.xaml -->
+                <!-- Daylight (light) — derived from the "Midnight v2" token table:
+                     same geometry, light values. Only Midnight was designed; keep
+                     edits here in lockstep with the dark dictionary. -->
                 <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="WindowBg" Color="#F6F5F2"/>
+                    <SolidColorBrush x:Key="WindowBg" Color="#F6F6F9"/>
                     <SolidColorBrush x:Key="PanelBg" Color="#FFFFFF"/>
-                    <SolidColorBrush x:Key="Panel2Bg" Color="#FAFAF8"/>
-                    <SolidColorBrush x:Key="LogBg" Color="#FBFBF8"/>
-                    <SolidColorBrush x:Key="BorderBrush" Color="#E6E3DC"/>
-                    <SolidColorBrush x:Key="BorderSoftBrush" Color="#EEECE7"/>
-                    <SolidColorBrush x:Key="Fg" Color="#1C1C1A"/>
-                    <SolidColorBrush x:Key="Dim" Color="#6B6A64"/>
-                    <SolidColorBrush x:Key="Dimmer" Color="#9A988F"/>
-                    <SolidColorBrush x:Key="Accent" Color="#2F5D50"/>
-                    <SolidColorBrush x:Key="AccentSoft" Color="#E8EFED"/>
+                    <SolidColorBrush x:Key="Panel2Bg" Color="#EFEFF4"/>
+                    <SolidColorBrush x:Key="LogBg" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="BorderBrush" Color="#1A000000"/>
+                    <SolidColorBrush x:Key="BorderSoftBrush" Color="#12000000"/>
+                    <SolidColorBrush x:Key="HairlineSoft" Color="#0D000000"/>
+                    <SolidColorBrush x:Key="ChipBorder" Color="#1A000000"/>
+                    <SolidColorBrush x:Key="Fg" Color="#1B1C22"/>
+                    <SolidColorBrush x:Key="Dim" Color="#5A5F6E"/>
+                    <SolidColorBrush x:Key="Dimmer" Color="#8A8FA0"/>
+                    <SolidColorBrush x:Key="Accent" Color="#5B5EE8"/>
+                    <SolidColorBrush x:Key="AccentSoft" Color="#1A5B5EE8"/>
                     <SolidColorBrush x:Key="AccentOn" Color="#FFFFFF"/>
-                    <SolidColorBrush x:Key="Success" Color="#2F8060"/>
-                    <SolidColorBrush x:Key="Error" Color="#B23A3A"/>
+                    <SolidColorBrush x:Key="AccentText" Color="#4548D6"/>
+                    <SolidColorBrush x:Key="AccentLink" Color="#5457E0"/>
+                    <SolidColorBrush x:Key="AccentBorder" Color="#665B5EE8"/>
+                    <SolidColorBrush x:Key="Success" Color="#2F8F63"/>
+                    <SolidColorBrush x:Key="SuccessSoft" Color="#262F8F63"/>
+                    <SolidColorBrush x:Key="Error" Color="#C24438"/>
+
+                    <!-- Fluent plumbing: remaining stock controls follow the accent,
+                         and text boxes keep their flat look through hover/focus. -->
+                    <Color x:Key="SystemAccentColor">#5B5EE8</Color>
+                    <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#8A8FA0"/>
+                    <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#8A8FA0"/>
+                    <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#8A8FA0"/>
                 </ResourceDictionary>
 
-                <!-- Midnight (dark) — ported from WrapTune/Themes/Midnight.xaml -->
+                <!-- Midnight (dark) — "Midnight v2", the designed theme. -->
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="WindowBg" Color="#0F1822"/>
-                    <SolidColorBrush x:Key="PanelBg" Color="#172230"/>
-                    <SolidColorBrush x:Key="Panel2Bg" Color="#1D2A3A"/>
-                    <SolidColorBrush x:Key="LogBg" Color="#0A1118"/>
-                    <SolidColorBrush x:Key="BorderBrush" Color="#27384E"/>
-                    <SolidColorBrush x:Key="BorderSoftBrush" Color="#1F2D40"/>
-                    <SolidColorBrush x:Key="Fg" Color="#E7EEF6"/>
-                    <SolidColorBrush x:Key="Dim" Color="#8094AB"/>
-                    <SolidColorBrush x:Key="Dimmer" Color="#566A82"/>
-                    <SolidColorBrush x:Key="Accent" Color="#5EEAD4"/>
-                    <SolidColorBrush x:Key="AccentSoft" Color="#152C36"/>
-                    <SolidColorBrush x:Key="AccentOn" Color="#073B36"/>
-                    <SolidColorBrush x:Key="Success" Color="#52C7A0"/>
+                    <SolidColorBrush x:Key="WindowBg" Color="#0F1014"/>
+                    <SolidColorBrush x:Key="PanelBg" Color="#15161C"/>
+                    <SolidColorBrush x:Key="Panel2Bg" Color="#1A1B23"/>
+                    <SolidColorBrush x:Key="LogBg" Color="#15161C"/>
+                    <SolidColorBrush x:Key="BorderBrush" Color="#14FFFFFF"/>
+                    <SolidColorBrush x:Key="BorderSoftBrush" Color="#0FFFFFFF"/>
+                    <SolidColorBrush x:Key="HairlineSoft" Color="#0DFFFFFF"/>
+                    <SolidColorBrush x:Key="ChipBorder" Color="#1AFFFFFF"/>
+                    <SolidColorBrush x:Key="Fg" Color="#EDEEF3"/>
+                    <SolidColorBrush x:Key="Dim" Color="#9BA0AE"/>
+                    <SolidColorBrush x:Key="Dimmer" Color="#62687A"/>
+                    <SolidColorBrush x:Key="Accent" Color="#8B8DF7"/>
+                    <SolidColorBrush x:Key="AccentSoft" Color="#248B8DF7"/>
+                    <SolidColorBrush x:Key="AccentOn" Color="#14143A"/>
+                    <SolidColorBrush x:Key="AccentText" Color="#B9BAFF"/>
+                    <SolidColorBrush x:Key="AccentLink" Color="#A5A7FF"/>
+                    <SolidColorBrush x:Key="AccentBorder" Color="#668B8DF7"/>
+                    <SolidColorBrush x:Key="Success" Color="#7CD4A4"/>
+                    <SolidColorBrush x:Key="SuccessSoft" Color="#267CD4A4"/>
                     <SolidColorBrush x:Key="Error" Color="#E06C60"/>
+
+                    <Color x:Key="SystemAccentColor">#8B8DF7</Color>
+                    <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#62687A"/>
+                    <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#62687A"/>
+                    <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#62687A"/>
                 </ResourceDictionary>
 
             </ResourceDictionary.ThemeDictionaries>

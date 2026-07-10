@@ -2,10 +2,12 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="WrapTuneMacOS.MainWindow"
         Title="WrapTune"
-        Width="720" Height="600" MinWidth="640" MinHeight="540"
+        Width="680" Height="660" MinWidth="680" MinHeight="660"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBg}"
-        FontFamily="Inter" FontSize="13">
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="44"
+        FontFamily="{StaticResource UiFont}" FontSize="13">
 
     <!-- macOS menu bar. Avalonia only populates it when a NativeMenu is declared —
          without this block the app shows just the bare app menu. -->
@@ -41,6 +43,8 @@
                     <NativeMenu>
                         <NativeMenuItem Header="Minimize" Gesture="Meta+M" Click="OnWindowMinimize"/>
                         <NativeMenuItem Header="Zoom" Click="OnWindowZoom"/>
+                        <NativeMenuItemSeparator/>
+                        <NativeMenuItem Header="Toggle Theme" Gesture="Meta+T" Click="OnToggleTheme"/>
                     </NativeMenu>
                 </NativeMenuItem.Menu>
             </NativeMenuItem>
@@ -61,351 +65,551 @@
     </NativeMenu.Menu>
 
     <Window.Styles>
-        <Style Selector="TextBlock.fieldLabel">
-            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
-            <Setter Property="FontSize" Value="12.5"/>
-            <Setter Property="FontWeight" Value="Medium"/>
-            <Setter Property="HorizontalAlignment" Value="Right"/>
-        </Style>
-        <Style Selector="TextBlock.fieldHint">
-            <Setter Property="Foreground" Value="{DynamicResource Dimmer}"/>
-            <Setter Property="FontFamily" Value="Menlo"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="HorizontalAlignment" Value="Right"/>
-        </Style>
-        <Style Selector="TextBox.path">
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="FontSize" Value="12.5"/>
-            <Setter Property="FontFamily" Value="Menlo"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Padding" Value="10,0,8,0"/>
+
+        <!-- ── cards & rows ── -->
+        <Style Selector="Border.card">
             <Setter Property="Background" Value="{DynamicResource PanelBg}"/>
-            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSoftBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CaretBrush" Value="{DynamicResource Accent}"/>
+            <Setter Property="CornerRadius" Value="12"/>
         </Style>
-        <Style Selector="Button.browse">
-            <Setter Property="Width" Value="38"/>
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="Content" Value="…"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Background" Value="{DynamicResource Panel2Bg}"/>
+        <Style Selector="Border.preview">
+            <Setter Property="Opacity" Value="0.55"/>
+        </Style>
+        <Style Selector="Border.fieldRow">
+            <Setter Property="Height" Value="42"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource HairlineSoft}"/>
+            <Setter Property="BorderThickness" Value="0,1,0,0"/>
+            <Setter Property="Padding" Value="16,0"/>
+        </Style>
+        <Style Selector="Border.fieldRow.filled">
+            <Setter Property="Height" Value="38"/>
+        </Style>
+
+        <!-- ── step badges (numbered circles) ── -->
+        <Style Selector="Border.badge">
+            <Setter Property="Width" Value="22"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="CornerRadius" Value="11"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ChipBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style Selector="Border.badge > TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Border.badge.done">
+            <Setter Property="Background" Value="{DynamicResource SuccessSoft}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="Border.badge.done > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Success}"/>
+        </Style>
+        <Style Selector="Border.badge.active">
+            <Setter Property="Background" Value="{DynamicResource AccentSoft}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="Border.badge.active > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource AccentText}"/>
+        </Style>
+
+        <!-- ── text roles ── -->
+        <Style Selector="TextBlock.stepTitle">
+            <Setter Property="FontSize" Value="13.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.fieldLabel">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.monoHint">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dimmer}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.footnote">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dimmer}"/>
+        </Style>
+
+        <!-- ── value cells: borderless right-aligned mono text boxes ── -->
+        <Style Selector="TextBox.value">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="TextAlignment" Value="Right"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+        </Style>
+        <Style Selector="TextBox.value:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
+        <Style Selector="TextBox.value:focus /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
+
+        <!-- ── signing input wells ── -->
+        <Style Selector="TextBox.input">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="Background" Value="{DynamicResource WindowBg}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBox.input:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="{DynamicResource WindowBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        </Style>
+        <Style Selector="TextBox.input:focus /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="{DynamicResource WindowBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBorder}"/>
+        </Style>
+
+        <!-- ── buttons ── -->
+        <Style Selector="Button.browse">
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Background" Value="{DynamicResource Panel2Bg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Content" Value="browse"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
         <Style Selector="Button.primary">
             <Setter Property="Height" Value="34"/>
-            <Setter Property="MinWidth" Value="100"/>
-            <Setter Property="Padding" Value="18,0"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="CornerRadius" Value="10"/>
             <Setter Property="Background" Value="{DynamicResource Accent}"/>
             <Setter Property="Foreground" Value="{DynamicResource AccentOn}"/>
             <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="20,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
-        <Style Selector="Button.secondary">
+        <Style Selector="Button.primary:disabled">
+            <Setter Property="Opacity" Value="0.35"/>
+        </Style>
+        <Style Selector="Button.primary:disabled /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Accent}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentOn}"/>
+        </Style>
+        <Style Selector="Button.ghost">
             <Setter Property="Height" Value="34"/>
-            <Setter Property="Padding" Value="14,0"/>
-            <Setter Property="FontSize" Value="12.5"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="CornerRadius" Value="10"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ChipBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
-        <Style Selector="Button.toggle">
-            <Setter Property="Height" Value="28"/>
-            <Setter Property="Padding" Value="10,0"/>
+        <Style Selector="Button.link">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
             <Setter Property="FontSize" Value="11.5"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentLink}"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
-        <Style Selector="TextBlock.signLabel">
-            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
-            <Setter Property="FontSize" Value="12"/>
+        <Style Selector="Button.link:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="Button.link.mono">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dimmer}"/>
+        </Style>
+
+        <!-- ── chips ── -->
+        <Style Selector="Border.chip">
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ChipBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6,0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
-        <!-- Collapsible section header + body, themed to match the rest of the app
-             (avoids the Fluent Expander's own dark chrome). -->
-        <Style Selector="Button.section">
-            <Setter Property="Height" Value="44"/>
+        <Style Selector="Border.chip > TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dimmer}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Border.chip.accent">
+            <Setter Property="Background" Value="{DynamicResource AccentSoft}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="Border.chip.accent > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource AccentText}"/>
+        </Style>
+        <Style Selector="Border.kbd">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ChipBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="9,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Border.kbd > TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dimmer}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- ── segmented cert-mode control ── -->
+        <Style Selector="RadioButton.seg">
+            <Setter Property="Height" Value="30"/>
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="Padding" Value="16,0"/>
-            <Setter Property="Background" Value="{DynamicResource PanelBg}"/>
-            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dimmer}"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:Name="segBg" Background="Transparent">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
         </Style>
-        <Style Selector="Button.section:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource Panel2Bg}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Style Selector="RadioButton.seg:checked">
+            <Setter Property="Foreground" Value="{DynamicResource AccentText}"/>
         </Style>
-        <Style Selector="Border.sectionBody">
-            <Setter Property="Margin" Value="0,8,0,0"/>
-            <Setter Property="Padding" Value="16"/>
-            <Setter Property="Background" Value="{DynamicResource PanelBg}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="8"/>
+        <Style Selector="RadioButton.seg:checked /template/ Border#segBg">
+            <Setter Property="Background" Value="{DynamicResource AccentSoft}"/>
+        </Style>
+
+        <!-- ── switches: no on/off captions; accent comes from SystemAccentColor ── -->
+        <Style Selector="ToggleSwitch">
+            <Setter Property="OnContent" Value="{x:Null}"/>
+            <Setter Property="OffContent" Value="{x:Null}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- ── raw log ── -->
+        <Style Selector="TextBox.rawlog">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12"/>
         </Style>
     </Window.Styles>
 
-    <Grid Margin="24" RowDefinitions="Auto,*,Auto">
+    <Grid RowDefinitions="44,*">
 
-        <!-- 0 · Header (pinned) -->
-        <Grid Grid.Row="0" Margin="0,0,0,14" ColumnDefinitions="*,Auto">
-            <StackPanel Grid.Column="0">
-                <TextBlock Text="New package" FontSize="20" FontWeight="SemiBold"
-                           Foreground="{DynamicResource Fg}"/>
-                <TextBlock Margin="0,3,0,0" FontSize="12.5" Foreground="{DynamicResource Dim}">
-                    <Run Text="Wrap a Win32 installer into an "/>
-                    <Run FontFamily="Menlo" Foreground="{DynamicResource Accent}" Text=".intunewin"/>
-                    <Run Text=" package for Microsoft Intune."/>
-                </TextBlock>
-            </StackPanel>
-            <Button x:Name="BtnTheme" Grid.Column="1" Classes="toggle"
-                    Content="◐ Dark" Click="BtnTheme_Click" VerticalAlignment="Top"/>
-        </Grid>
-
-        <!-- Scrollable body — keeps the footer (Package) pinned even when the
-             optional signing section is expanded taller than the window. -->
-        <ScrollViewer Grid.Row="1" Margin="0,0,0,14"
-                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel>
-
-        <!-- Built-in engine pill (replaces WrapTune's exe-path row) -->
-        <Border Margin="0,0,0,16"
-                Background="{DynamicResource AccentSoft}"
-                BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1"
-                CornerRadius="8" Padding="14,10">
-            <StackPanel Orientation="Horizontal">
-                <Ellipse Width="8" Height="8" Fill="{DynamicResource Accent}" VerticalAlignment="Center"/>
-                <TextBlock Margin="10,0,0,0" VerticalAlignment="Center"
-                           FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Fg}"
-                           Text="Built-in .intunewin engine"/>
-                <TextBlock Margin="10,0,0,0" VerticalAlignment="Center"
-                           FontSize="11.5" Foreground="{DynamicResource Dim}"
-                           Text="— no external tool needed"/>
-            </StackPanel>
+        <!-- Title-bar strip: drag region + wordmark (traffic lights are the OS's). -->
+        <Border Grid.Row="0" Background="Transparent" PointerPressed="TitleBar_PointerPressed">
+            <TextBlock Text="WrapTune" FontSize="12" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Dimmer}"
+                       HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,18,0"/>
         </Border>
 
-        <!-- Form rows -->
-        <Grid ColumnDefinitions="128,*,Auto" RowDefinitions="Auto,Auto,Auto">
+        <Grid Grid.Row="1" Margin="30,6,30,24" MaxWidth="620" RowDefinitions="*,Auto"
+              DragDrop.AllowDrop="True">
 
-            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,14,10" VerticalAlignment="Center">
-                <TextBlock Classes="fieldLabel" Text="Source folder"/>
-                <TextBlock Classes="fieldHint" Text="-c"/>
-            </StackPanel>
-            <TextBox x:Name="TxtSourceFolder" Grid.Row="0" Grid.Column="1" Margin="0,0,0,10"
-                     Classes="path" DragDrop.AllowDrop="True"
-                     Watermark="Folder whose contents get packaged"/>
-            <Button x:Name="BtnBrowseSource" Grid.Row="0" Grid.Column="2" Margin="6,0,0,10"
-                    Classes="browse" Click="BtnBrowseSource_Click"/>
+            <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <Panel>
 
-            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,14,10" VerticalAlignment="Center">
-                <TextBlock Classes="fieldLabel" Text="Setup file"/>
-                <TextBlock Classes="fieldHint" Text="-s"/>
-            </StackPanel>
-            <TextBox x:Name="TxtSetupFile" Grid.Row="1" Grid.Column="1" Margin="0,0,0,10"
-                     Classes="path" DragDrop.AllowDrop="True"
-                     Watermark="The installer inside the source folder"/>
-            <Button x:Name="BtnBrowseSetup" Grid.Row="1" Grid.Column="2" Margin="6,0,0,10"
-                    Classes="browse" Click="BtnBrowseSetup_Click"/>
+                    <!-- ═══ Form state ═══ -->
+                    <StackPanel x:Name="PanelForm">
 
-            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
-                <TextBlock Classes="fieldLabel" Text="Output folder"/>
-                <TextBlock Classes="fieldHint" Text="-o"/>
-            </StackPanel>
-            <TextBox x:Name="TxtOutputFolder" Grid.Row="2" Grid.Column="1"
-                     Classes="path" DragDrop.AllowDrop="True"
-                     Watermark="Where the .intunewin is written"/>
-            <Button x:Name="BtnBrowseOutput" Grid.Row="2" Grid.Column="2" Margin="6,0,0,0"
-                    Classes="browse" Click="BtnBrowseOutput_Click"/>
-        </Grid>
+                        <TextBlock Text="New package" FontSize="19" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Fg}" LetterSpacing="-0.19"/>
+                        <TextBlock x:Name="TxtSubtitleEmpty" Margin="0,4,0,0" FontSize="13"
+                                   Foreground="{DynamicResource Dim}">
+                            <Run Text="Folder in, "/><Run FontFamily="{StaticResource MonoFont}" FontSize="12" Foreground="{DynamicResource AccentLink}" Text=".intunewin"/><Run Text=" out — three steps."/>
+                        </TextBlock>
+                        <TextBlock x:Name="TxtSubtitleReady" Margin="0,4,0,0" FontSize="13"
+                                   Foreground="{DynamicResource Dim}" Text="Review, sign, package."
+                                   IsVisible="False"/>
 
-        <!-- Overwrite toggle -->
-        <CheckBox x:Name="ChkOverwrite" Margin="142,14,0,16" IsChecked="True"
-                  Foreground="{DynamicResource Fg}" FontSize="12.5">
-            <TextBlock>
-                <Run Text="Overwrite existing output "/>
-                <Run FontFamily="Menlo" Foreground="{DynamicResource Dimmer}" FontSize="11" Text="-q"/>
-            </TextBlock>
-        </CheckBox>
+                        <!-- Step 1 · Files -->
+                        <Border Classes="card" Margin="0,18,0,0">
+                            <StackPanel>
+                                <Grid ColumnDefinitions="Auto,Auto,*" Margin="16,11">
+                                    <Border x:Name="Step1Badge" Classes="badge">
+                                        <TextBlock x:Name="Step1BadgeText" Text="1"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Classes="stepTitle" Text="Files" Margin="10,0,0,0"/>
+                                    <TextBlock x:Name="TxtSourceSummary" Grid.Column="2" Classes="monoHint"
+                                               HorizontalAlignment="Right" Text="or drop a folder anywhere"/>
+                                </Grid>
 
-        <!-- Code signing (optional) — custom collapsible, themed to match the app -->
-        <StackPanel Margin="0,0,0,14">
-            <Button x:Name="BtnSignToggle" Classes="section" Click="BtnSignToggle_Click">
-                <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Grid.Column="0" Text="Code signing — optional"
-                               VerticalAlignment="Center" FontSize="12.5" FontWeight="Medium"
-                               Foreground="{DynamicResource Fg}"/>
-                    <TextBlock x:Name="SignChevron" Grid.Column="1" Text="⌄"
-                               VerticalAlignment="Center" FontSize="14"
-                               Foreground="{DynamicResource Dim}"/>
-                </Grid>
-            </Button>
-            <Border x:Name="SignBody" Classes="sectionBody" IsVisible="False">
-                <StackPanel Spacing="10">
-                <CheckBox x:Name="ChkSignPayload" IsCheckedChanged="ChkSignPayload_IsCheckedChanged"
-                          Foreground="{DynamicResource Fg}" FontSize="12.5">
-                    <TextBlock Text="Authenticode-sign the payload before packaging"/>
-                </CheckBox>
+                                <Border x:Name="RowSource" Classes="fieldRow">
+                                    <Grid ColumnDefinitions="140,*,Auto" VerticalAlignment="Center">
+                                        <TextBlock Classes="fieldLabel" Text="Source folder"/>
+                                        <TextBox x:Name="TxtSourceFolder" Grid.Column="1" Classes="value"
+                                                 Margin="12,0" Watermark="none selected"
+                                                 DragDrop.AllowDrop="True"/>
+                                        <Button x:Name="BtnBrowseSource" Grid.Column="2" Classes="browse"
+                                                Click="BtnBrowseSource_Click"/>
+                                    </Grid>
+                                </Border>
+                                <Border x:Name="RowSetup" Classes="fieldRow">
+                                    <Grid ColumnDefinitions="140,*,Auto" VerticalAlignment="Center">
+                                        <TextBlock Classes="fieldLabel" Text="Setup file"/>
+                                        <TextBox x:Name="TxtSetupFile" Grid.Column="1" Classes="value"
+                                                 Margin="12,0" Watermark="auto-detected from source"
+                                                 DragDrop.AllowDrop="True"/>
+                                        <Button x:Name="BtnBrowseSetup" Grid.Column="2" Classes="browse"
+                                                Click="BtnBrowseSetup_Click"/>
+                                    </Grid>
+                                </Border>
+                                <Border x:Name="RowOutput" Classes="fieldRow">
+                                    <Grid ColumnDefinitions="140,*,Auto" VerticalAlignment="Center">
+                                        <TextBlock Classes="fieldLabel" Text="Output folder"/>
+                                        <TextBox x:Name="TxtOutputFolder" Grid.Column="1" Classes="value"
+                                                 Margin="12,0" Watermark="where the .intunewin lands"
+                                                 DragDrop.AllowDrop="True"/>
+                                        <Button x:Name="BtnBrowseOutput" Grid.Column="2" Classes="browse"
+                                                Click="BtnBrowseOutput_Click"/>
+                                    </Grid>
+                                </Border>
 
-                <StackPanel x:Name="SigningFields" Spacing="10">
-                    <TextBlock TextWrapping="Wrap" FontSize="11.5" Foreground="{DynamicResource Dim}"
-                               Text="Signs files in place; already-signed files are skipped. Signing runs in-process — nothing extra to install."/>
+                                <Border x:Name="RowOverwrite" Classes="fieldRow">
+                                    <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                        <TextBlock Classes="fieldLabel" Text="Overwrite existing output"/>
+                                        <ToggleSwitch x:Name="ChkOverwrite" Grid.Column="1" IsChecked="True"/>
+                                    </Grid>
+                                </Border>
 
-                    <StackPanel Orientation="Horizontal" Spacing="18">
-                        <RadioButton x:Name="RbPfx" GroupName="certMode" IsChecked="True"
-                                     IsCheckedChanged="RbCertMode_IsCheckedChanged"
-                                     Content="PFX / .p12 file" Foreground="{DynamicResource Fg}" FontSize="12.5"/>
-                        <RadioButton x:Name="RbPkcs11" GroupName="certMode"
-                                     IsCheckedChanged="RbCertMode_IsCheckedChanged"
-                                     Content="PKCS#11 token / HSM" Foreground="{DynamicResource Fg}" FontSize="12.5"/>
-                        <RadioButton x:Name="RbTrustedSigning" GroupName="certMode"
-                                     IsCheckedChanged="RbCertMode_IsCheckedChanged"
-                                     Content="Azure Artifact Signing" Foreground="{DynamicResource Fg}" FontSize="12.5"
-                                     ToolTip.Tip="Azure Artifact Signing (formerly Trusted Signing) — cloud HSM signing; the key never leaves Azure."/>
-                    </StackPanel>
-
-                    <!-- PFX -->
-                    <Grid x:Name="PanelPfx" ColumnDefinitions="120,*,Auto">
-                        <TextBlock Grid.Column="0" Classes="signLabel" Text="Certificate"/>
-                        <TextBox x:Name="TxtPfxPath" Grid.Column="1" Classes="path"
-                                 Watermark="Path to .pfx / .p12"/>
-                        <Button x:Name="BtnBrowsePfx" Grid.Column="2" Margin="6,0,0,0"
-                                Classes="browse" Click="BtnBrowsePfx_Click"/>
-                    </Grid>
-
-                    <!-- PKCS#11 -->
-                    <StackPanel x:Name="PanelPkcs11" Spacing="8" IsVisible="False">
-                        <Grid ColumnDefinitions="120,*,Auto">
-                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Module"/>
-                            <TextBox x:Name="TxtPkcs11Module" Grid.Column="1" Classes="path"
-                                     Watermark="PKCS#11 module (.dylib / .so)"/>
-                            <Button x:Name="BtnBrowsePkcs11" Grid.Column="2" Margin="6,0,0,0"
-                                    Classes="browse" Click="BtnBrowsePkcs11_Click"/>
-                        </Grid>
-                        <Grid ColumnDefinitions="120,*">
-                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Thumbprint"/>
-                            <TextBox x:Name="TxtPkcs11Thumbprint" Grid.Column="1" Classes="path"
-                                     Watermark="Certificate thumbprint — optional when the token holds one cert"
-                                     ToolTip.Tip="Only needed to pick a certificate when the token holds several. Leave blank when it holds exactly one."/>
-                        </Grid>
-                    </StackPanel>
-
-                    <!-- Azure Artifact Signing (jsign) -->
-                    <StackPanel x:Name="PanelTrustedSigning" Spacing="8" IsVisible="False">
-                        <!-- Live prerequisites callout: signer, token source, and the RBAC role. -->
-                        <Border Background="{DynamicResource Panel2Bg}"
-                                BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1"
-                                CornerRadius="6" Padding="10,8">
-                            <TextBlock x:Name="TxtTsPrereq" TextWrapping="Wrap" FontSize="11.5"
-                                       LineHeight="17" Foreground="{DynamicResource Dim}"/>
+                                <Border x:Name="RowMsi" Classes="fieldRow" Height="NaN" MinHeight="0"
+                                        Padding="16,8,16,11" IsVisible="False">
+                                    <TextBlock x:Name="TxtMsiReadout" Classes="footnote"/>
+                                </Border>
+                            </StackPanel>
                         </Border>
-                        <Grid ColumnDefinitions="120,*">
-                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Endpoint"/>
-                            <TextBox x:Name="TxtTsEndpoint" Grid.Column="1" Classes="path"
-                                     Watermark="e.g. eus.codesigning.azure.net"
-                                     ToolTip.Tip="Your account's region host. In the Azure portal, open your Artifact Signing account → Overview → copy the &quot;Account URI&quot; (e.g. https://eus.codesigning.azure.net/). The https:// and trailing slash are optional — WrapTune strips them."/>
-                        </Grid>
-                        <Grid ColumnDefinitions="120,*">
-                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Account"/>
-                            <TextBox x:Name="TxtTsAccount" Grid.Column="1" Classes="path"
-                                     Watermark="Artifact Signing account name"
-                                     ToolTip.Tip="The name of your Artifact Signing account resource (Azure portal → the account's name, or the codeSigningAccounts resource name)."/>
-                        </Grid>
-                        <Grid ColumnDefinitions="120,*">
-                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Cert profile"/>
-                            <TextBox x:Name="TxtTsProfile" Grid.Column="1" Classes="path"
-                                     Watermark="Certificate profile name"
-                                     ToolTip.Tip="The certificate profile under your account: Azure portal → your Artifact Signing account → Certificate profiles → the profile name."/>
-                        </Grid>
-                        <Grid ColumnDefinitions="120,*">
-                            <TextBlock Grid.Column="0" Classes="signLabel" Text="Access token"/>
-                            <TextBox x:Name="TxtTsToken" Grid.Column="1" Classes="path" PasswordChar="•"
-                                     Watermark="Blank = auto-fetch via Azure CLI (az login)"
-                                     ToolTip.Tip="Leave blank to auto-fetch a fresh token via the Azure CLI (run az login first). Or paste one from: az account get-access-token --resource https://codesigning.azure.net --query accessToken -o tsv"/>
-                        </Grid>
+
+                        <TextBlock Classes="footnote" Margin="4,8,0,0"
+                                   Text="setup file and output are derived from the folder — fix them only when they're wrong"/>
+
+                        <!-- Step 2 · Sign payload -->
+                        <Border x:Name="Card2" Classes="card preview" Margin="0,16,0,0">
+                            <StackPanel>
+                                <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" MinHeight="46" Margin="16,0">
+                                    <Border x:Name="Step2Badge" Classes="badge" VerticalAlignment="Center">
+                                        <TextBlock Text="2"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Classes="stepTitle" Text="Sign payload" Margin="10,0,0,0"/>
+                                    <Border Grid.Column="2" Classes="chip" Margin="10,0,0,0">
+                                        <TextBlock Text="optional"/>
+                                    </Border>
+                                    <TextBlock x:Name="TxtSignHint" Grid.Column="3" Classes="monoHint"
+                                               HorizontalAlignment="Right" Margin="0,0,12,0"
+                                               Text="needs a certificate"/>
+                                    <ToggleSwitch x:Name="ChkSignPayload" Grid.Column="4"
+                                                  IsCheckedChanged="ChkSignPayload_IsCheckedChanged"/>
+                                </Grid>
+
+                                <StackPanel x:Name="SignBody" Margin="50,0,16,12" Spacing="9" IsVisible="False">
+
+                                    <!-- segmented cert-mode -->
+                                    <Border CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                                        <Grid ColumnDefinitions="*,1,*,1,*">
+                                            <RadioButton x:Name="RbPfx" Classes="seg" GroupName="certMode" IsChecked="True"
+                                                         IsCheckedChanged="RbCertMode_IsCheckedChanged" Content="pfx / .p12"/>
+                                            <Border Grid.Column="1" Background="{DynamicResource BorderSoftBrush}"/>
+                                            <RadioButton x:Name="RbPkcs11" Grid.Column="2" Classes="seg" GroupName="certMode"
+                                                         IsCheckedChanged="RbCertMode_IsCheckedChanged" Content="pkcs#11 / hsm"/>
+                                            <Border Grid.Column="3" Background="{DynamicResource BorderSoftBrush}"/>
+                                            <RadioButton x:Name="RbTrustedSigning" Grid.Column="4" Classes="seg" GroupName="certMode"
+                                                         IsCheckedChanged="RbCertMode_IsCheckedChanged" Content="azure"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- PFX -->
+                                    <Grid x:Name="PanelPfx" ColumnDefinitions="*,10,*">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBox x:Name="TxtPfxPath" Classes="input" Watermark="path to .pfx / .p12"/>
+                                            <Button x:Name="BtnBrowsePfx" Grid.Column="1" Classes="browse" Margin="6,0,0,0"
+                                                    VerticalAlignment="Center" Click="BtnBrowsePfx_Click"/>
+                                        </Grid>
+                                        <TextBox x:Name="TxtSecret" Grid.Column="2" Classes="input" PasswordChar="•"
+                                                 Watermark="password"/>
+                                    </Grid>
+
+                                    <!-- PKCS#11 -->
+                                    <StackPanel x:Name="PanelPkcs11" Spacing="9" IsVisible="False">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBox x:Name="TxtPkcs11Module" Classes="input"
+                                                     Watermark="pkcs#11 module (.dylib / .so)"/>
+                                            <Button x:Name="BtnBrowsePkcs11" Grid.Column="1" Classes="browse" Margin="6,0,0,0"
+                                                    VerticalAlignment="Center" Click="BtnBrowsePkcs11_Click"/>
+                                        </Grid>
+                                        <Grid ColumnDefinitions="*,10,*">
+                                            <TextBox x:Name="TxtPkcs11Thumbprint" Classes="input"
+                                                     Watermark="cert thumbprint — optional for single-cert tokens"/>
+                                            <TextBox x:Name="TxtPkcs11Pin" Grid.Column="2" Classes="input" PasswordChar="•"
+                                                     Watermark="pin"/>
+                                        </Grid>
+                                    </StackPanel>
+
+                                    <!-- Azure Artifact Signing -->
+                                    <StackPanel x:Name="PanelTrustedSigning" Spacing="9" IsVisible="False">
+                                        <Grid ColumnDefinitions="*,10,*">
+                                            <TextBox x:Name="TxtTsEndpoint" Classes="input"
+                                                     Watermark="endpoint — e.g. eus.codesigning.azure.net"/>
+                                            <TextBox x:Name="TxtTsAccount" Grid.Column="2" Classes="input"
+                                                     Watermark="account"/>
+                                        </Grid>
+                                        <Grid ColumnDefinitions="*,10,*">
+                                            <TextBox x:Name="TxtTsProfile" Classes="input"
+                                                     Watermark="certificate profile"/>
+                                            <TextBox x:Name="TxtTsToken" Grid.Column="2" Classes="input" PasswordChar="•"
+                                                     Watermark="token — blank = az login"/>
+                                        </Grid>
+                                        <TextBlock x:Name="TxtTsPrereq" Classes="footnote" TextWrapping="Wrap" LineHeight="17"/>
+                                    </StackPanel>
+
+                                    <TextBlock Classes="footnote"
+                                               Text="password never saved · signed in place · already-signed files skipped"/>
+
+                                    <Button x:Name="BtnAdvancedSigning" Classes="link" HorizontalAlignment="Left"
+                                            Content="advanced — timestamp, description, url ▾"
+                                            Click="BtnAdvancedSigning_Click"/>
+
+                                    <StackPanel x:Name="AdvancedSigning" Spacing="9" IsVisible="False">
+                                        <Grid ColumnDefinitions="*,10,*">
+                                            <TextBox x:Name="TxtTimestampUrl" Classes="input"
+                                                     Watermark="rfc3161 timestamp url"/>
+                                            <TextBox x:Name="TxtSignDescription" Grid.Column="2" Classes="input"
+                                                     Watermark="signature description"/>
+                                        </Grid>
+                                        <Grid ColumnDefinitions="*,10,Auto" VerticalAlignment="Center">
+                                            <TextBox x:Name="TxtSignUrl" Classes="input" Watermark="signature url"/>
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
+                                                        VerticalAlignment="Center">
+                                                <TextBlock Classes="footnote" VerticalAlignment="Center"
+                                                           Text="sign all signable files"/>
+                                                <ToggleSwitch x:Name="ChkSignAllFiles"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Step 3 · Package -->
+                        <Border x:Name="Card3" Classes="card preview" Margin="0,8,0,0" MinHeight="46">
+                            <Grid ColumnDefinitions="Auto,Auto,*" Margin="16,0" MinHeight="46">
+                                <Border Classes="badge" VerticalAlignment="Center">
+                                    <TextBlock Text="3"/>
+                                </Border>
+                                <TextBlock Grid.Column="1" Classes="stepTitle" Text="Package" Margin="10,0,0,0"/>
+                                <TextBlock x:Name="TxtPackageHint" Grid.Column="2" Classes="monoHint"
+                                           HorizontalAlignment="Right" Text="→ output.intunewin"/>
+                            </Grid>
+                        </Border>
                     </StackPanel>
 
-                    <Grid x:Name="RowSecret" ColumnDefinitions="120,*">
-                        <TextBlock Grid.Column="0" Classes="signLabel" Text="Password / PIN"/>
-                        <TextBox x:Name="TxtSecret" Grid.Column="1" Classes="path" PasswordChar="•"
-                                 Watermark="Not saved — entered each run"/>
-                    </Grid>
+                    <!-- ═══ Packaging state ═══ -->
+                    <StackPanel x:Name="PanelRunning" IsVisible="False">
 
-                    <Grid x:Name="RowTimestamp" ColumnDefinitions="120,*">
-                        <TextBlock Grid.Column="0" Classes="signLabel" Text="Timestamp URL"/>
-                        <TextBox x:Name="TxtTimestampUrl" Grid.Column="1" Classes="path"
-                                 Watermark="RFC3161 timestamp server (blank to skip)"/>
-                    </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Button x:Name="BtnNewPackage" Classes="link mono" Content="← new package"
+                                    IsVisible="False" VerticalAlignment="Center" Click="BtnNewPackage_Click"/>
+                            <TextBlock x:Name="TxtRunTitle" Text="Packaging" FontSize="19" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Fg}" LetterSpacing="-0.19"/>
+                        </StackPanel>
 
-                    <Grid ColumnDefinitions="120,*">
-                        <TextBlock Grid.Column="0" Classes="signLabel" Text="Description"/>
-                        <TextBox x:Name="TxtSignDescription" Grid.Column="1" Classes="path"
-                                 Watermark="Signature description (optional)"/>
-                    </Grid>
+                        <!-- context strip -->
+                        <Border Classes="card" CornerRadius="10" Height="40" Margin="0,16,0,0" Padding="14,0">
+                            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtBreadcrumb" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                                           Foreground="{DynamicResource Fg}" TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"/>
+                                <Border x:Name="ChipSigned" Grid.Column="1" Classes="chip accent" IsVisible="False">
+                                    <TextBlock x:Name="TxtChipSigned" Text="signed · pfx"/>
+                                </Border>
+                            </Grid>
+                        </Border>
 
-                    <Grid ColumnDefinitions="120,*">
-                        <TextBlock Grid.Column="0" Classes="signLabel" Text="URL"/>
-                        <TextBox x:Name="TxtSignUrl" Grid.Column="1" Classes="path"
-                                 Watermark="Signature URL (optional)"/>
-                    </Grid>
+                        <!-- progress hero -->
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,28,0,0">
+                            <TextBlock x:Name="TxtPercent" Text="0%" FontSize="42" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Fg}" LetterSpacing="-0.84"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtStageName" FontSize="13" Foreground="{DynamicResource Dim}"
+                                           HorizontalAlignment="Right" Text="Starting"/>
+                                <TextBlock x:Name="TxtElapsed" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                           Foreground="{DynamicResource Dimmer}" HorizontalAlignment="Right"
+                                           Text="00:00 elapsed"/>
+                            </StackPanel>
+                        </Grid>
+                        <ProgressBar x:Name="BarRun" Margin="0,14,0,0" Height="6" MinHeight="6"
+                                     CornerRadius="3" Minimum="0" Maximum="1"
+                                     Foreground="{DynamicResource Accent}" Background="{DynamicResource Panel2Bg}"/>
 
-                    <CheckBox x:Name="ChkSignAllFiles" Foreground="{DynamicResource Fg}" FontSize="12.5">
-                        <TextBlock Text="Also sign other signable files in the source folder"/>
-                    </CheckBox>
-                </StackPanel>
-                </StackPanel>
+                        <!-- stage list / raw log (same slot) -->
+                        <Border x:Name="StageCard" Classes="card" Margin="0,18,0,0" Padding="0,6">
+                            <StackPanel x:Name="StageList"/>
+                        </Border>
+                        <Border x:Name="RawLogCard" Classes="card" Margin="0,18,0,0" MinHeight="220"
+                                MaxHeight="300" IsVisible="False">
+                            <TextBox x:Name="TxtOutput" Classes="rawlog" IsReadOnly="True" TextWrapping="Wrap"
+                                     AcceptsReturn="True" ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+                        </Border>
+                    </StackPanel>
+                </Panel>
+            </ScrollViewer>
+
+            <!-- ═══ Footer (shared, pinned) ═══ -->
+            <Border Grid.Row="1" BorderBrush="{DynamicResource HairlineSoft}" BorderThickness="0,1,0,0"
+                    Padding="0,16,0,0">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                        <Button x:Name="BtnRawLog" Classes="link mono" Content="raw log ▾"
+                                IsVisible="False" Click="BtnRawLog_Click"/>
+                        <TextBlock x:Name="TxtStatus" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                                   Foreground="{DynamicResource Dimmer}" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" Text="0 of 3 paths set"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                        <Border x:Name="KbdChip" Classes="kbd" IsVisible="False">
+                            <TextBlock Text="⌘R"/>
+                        </Border>
+                        <Button x:Name="BtnOpenOutput" Classes="ghost" Content="Open output" IsVisible="False"
+                                Click="BtnOpenOutput_Click"/>
+                        <Button x:Name="BtnCancel" Classes="ghost" Content="Cancel" IsVisible="False"
+                                Click="BtnCancel_Click"/>
+                        <Button x:Name="BtnPackage" Classes="primary" Content="Package" IsEnabled="False"
+                                Click="BtnPackage_Click"/>
+                    </StackPanel>
+                </Grid>
             </Border>
-        </StackPanel>
-
-        <!-- Output log -->
-        <Border MinHeight="150" MaxHeight="280"
-                Background="{DynamicResource LogBg}"
-                BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1"
-                CornerRadius="8">
-            <TextBox x:Name="TxtOutput"
-                     Background="Transparent" BorderThickness="0"
-                     IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     FontFamily="Menlo" FontSize="11.5"
-                     Foreground="{DynamicResource Dim}" Padding="12"/>
-        </Border>
-
-        </StackPanel>
-        </ScrollViewer>
-
-        <!-- Footer (pinned) -->
-        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto,Auto">
-            <TextBlock x:Name="TxtStatus" Grid.Column="0" Text="Ready"
-                       VerticalAlignment="Center" FontSize="11.5"
-                       Foreground="{DynamicResource Dimmer}"/>
-            <Button x:Name="BtnOpenOutput" Grid.Column="1" Margin="0,0,10,0"
-                    Classes="secondary" Content="Open output" IsVisible="False"
-                    Click="BtnOpenOutput_Click"/>
-            <Button x:Name="BtnCancel" Grid.Column="2" Margin="0,0,10,0"
-                    Classes="secondary" Content="Cancel" IsVisible="False"
-                    Click="BtnCancel_Click"/>
-            <Button x:Name="BtnPackage" Grid.Column="3" Classes="primary"
-                    Content="Package" Click="BtnPackage_Click"/>
         </Grid>
     </Grid>
 </Window>
