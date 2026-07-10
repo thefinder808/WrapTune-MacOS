@@ -743,8 +743,9 @@ public partial class MainWindow : Window
         BtnCancel.IsVisible = false;
         BtnNewPackage.IsVisible = true;
         BtnOpenOutput.IsVisible = true;
-        BtnPackage.IsVisible = true;
-        BtnPackage.IsEnabled = true;
+        // No Package button here: after success it would invite an accidental
+        // re-run; "← new package" returns to the (still-filled) form instead.
+        BtnPackage.IsVisible = false;
         AppendOutput("Package created successfully!");
         SetStatus($"done — {Path.GetFileName(outputPath)} created", "Success");
     }
@@ -987,7 +988,8 @@ public partial class MainWindow : Window
 
     private static string? GetDropPath(DragEventArgs e)
     {
-        var files = e.Data.GetFiles()?.ToArray();
+        // DataTransfer is the Avalonia 12 API (Data is obsolete on 11.3).
+        var files = e.DataTransfer.TryGetFiles()?.ToArray();
         return files is { Length: 1 } ? files[0].Path.LocalPath : null;
     }
 

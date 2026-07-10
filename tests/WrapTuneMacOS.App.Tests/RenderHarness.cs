@@ -74,6 +74,9 @@ public sealed class RenderHarness
             while (DateTime.UtcNow < deadline &&
                    w.FindControl<TextBlock>("TxtPercent")!.Text != "Done")
                 Pump(TimeSpan.FromMilliseconds(100));
+            // One more pump so a render pass runs after the final state change —
+            // CaptureRenderedFrame otherwise returns the last (stale) frame.
+            Pump(TimeSpan.FromMilliseconds(300));
             Capture(w, outDir, "state3-done.png");
 
             // Daylight sanity frame (derived palette — not part of the mocks).
