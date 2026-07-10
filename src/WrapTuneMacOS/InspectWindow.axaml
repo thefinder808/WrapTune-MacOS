@@ -1,0 +1,83 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="WrapTuneMacOS.InspectWindow"
+        Title="Inspect Package"
+        Width="560" Height="520" MinWidth="480" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBg}"
+        FontFamily="Inter" FontSize="13">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.rowLabel">
+            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.rowValue">
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="FontFamily" Value="Menlo"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.secondary">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,*,Auto">
+
+        <TextBlock x:Name="TxtPkgPath" Grid.Row="0" Margin="0,0,0,12"
+                   FontFamily="Menlo" FontSize="11" TextWrapping="Wrap"
+                   Foreground="{DynamicResource Dimmer}"/>
+
+        <!-- Metadata -->
+        <Grid Grid.Row="1" ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+              Margin="0,0,0,10">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="rowLabel" Text="Name"/>
+            <TextBlock x:Name="TxtName" Grid.Row="0" Grid.Column="1" Classes="rowValue"/>
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="rowLabel" Text="Setup file"/>
+            <TextBlock x:Name="TxtSetup" Grid.Row="1" Grid.Column="1" Classes="rowValue"/>
+            <TextBlock Grid.Row="2" Grid.Column="0" Classes="rowLabel" Text="Tool version"/>
+            <TextBlock x:Name="TxtToolVersion" Grid.Row="2" Grid.Column="1" Classes="rowValue"/>
+            <TextBlock Grid.Row="3" Grid.Column="0" Classes="rowLabel" Text="Size"/>
+            <TextBlock x:Name="TxtSizes" Grid.Row="3" Grid.Column="1" Classes="rowValue"/>
+            <TextBlock Grid.Row="4" Grid.Column="0" Classes="rowLabel" Text="MSI"/>
+            <TextBlock x:Name="TxtMsi" Grid.Row="4" Grid.Column="1" Classes="rowValue" Text="—"/>
+        </Grid>
+
+        <!-- Verification verdict -->
+        <Border Grid.Row="2" Margin="0,0,0,10" Padding="12,8"
+                Background="{DynamicResource PanelBg}"
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="TxtChecks" FontFamily="Menlo" FontSize="12"
+                           Foreground="{DynamicResource Fg}" Text="Inspecting…"/>
+                <TextBlock x:Name="TxtVerdict" FontWeight="SemiBold" FontSize="12.5" Text=""/>
+            </StackPanel>
+        </Border>
+
+        <!-- Payload contents -->
+        <Border Grid.Row="3" Background="{DynamicResource LogBg}"
+                BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1" CornerRadius="8">
+            <ListBox x:Name="LstEntries" Background="Transparent" BorderThickness="0"
+                     FontFamily="Menlo" FontSize="11.5" Foreground="{DynamicResource Dim}"/>
+        </Border>
+
+        <!-- Footer -->
+        <Grid Grid.Row="4" Margin="0,12,0,0" ColumnDefinitions="*,Auto">
+            <TextBlock x:Name="TxtInspectStatus" Grid.Column="0" VerticalAlignment="Center"
+                       FontSize="11.5" TextWrapping="Wrap" Foreground="{DynamicResource Dimmer}"/>
+            <Button x:Name="BtnExtract" Grid.Column="1" Classes="secondary"
+                    Content="Extract payload…" IsEnabled="False" Click="OnExtract"/>
+        </Grid>
+    </Grid>
+</Window>

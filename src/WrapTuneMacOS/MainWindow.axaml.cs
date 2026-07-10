@@ -512,6 +512,31 @@ public partial class MainWindow : Window
         if (BtnPackage.IsEnabled) BtnPackage_Click(sender, new RoutedEventArgs());
     }
 
+    private async void MenuInspectPackage(object? sender, EventArgs e)
+    {
+        try
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Select a .intunewin package to inspect",
+                AllowMultiple = false,
+                SuggestedStartLocation = await StartLocationAsync(
+                    Directory.Exists(TxtOutputFolder.Text) ? TxtOutputFolder.Text : null),
+                FileTypeFilter =
+                [
+                    new FilePickerFileType("Intune packages") { Patterns = ["*.intunewin"] },
+                    new FilePickerFileType("All files") { Patterns = ["*"] },
+                ],
+            });
+            if (files.Count > 0)
+                new InspectWindow(files[0].Path.LocalPath).Show(this);
+        }
+        catch (Exception ex)
+        {
+            SetStatus("Couldn't open the inspector — " + ex.Message, "Error");
+        }
+    }
+
     private TextBox? FocusedTextBox() => FocusManager?.GetFocusedElement() as TextBox;
     private void OnEditCut(object? sender, EventArgs e) => FocusedTextBox()?.Cut();
     private void OnEditCopy(object? sender, EventArgs e) => FocusedTextBox()?.Copy();

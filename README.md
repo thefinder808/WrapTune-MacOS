@@ -48,6 +48,11 @@ nowhere in the chain.
   your `.exe`/`.msi`/`.ps1` from the Mac with a local cert (PFX or PKCS#11/HSM) or
   **Azure Artifact Signing** — formerly Trusted Signing. Signing runs in-process;
   nothing extra to install. See [Signing the payload](#signing-the-payload-optional).
+- **Package inspector** — **File → Inspect Package…** (⌘I) opens any `.intunewin`,
+  shows its metadata, runs the HMAC / digest / size verification, lists the payload
+  contents, and can extract the decrypted payload.
+- **`wraptune` CLI** — the same engine, scriptable: `pack`, `inspect`, and `extract`
+  for CI and automation. See [Command line](#command-line).
 - Light / dark theme.
 - **In-app auto-updates** — checks GitHub Releases on launch (once a day) and from
   **Help → Check for Updates…**, then one-click download → verify → install → relaunch.
@@ -77,6 +82,11 @@ build is notarized, Gatekeeper accepts it without the right-click-Open workaroun
 
 For `.msi` setup files, the package includes the MSI metadata Intune reads to
 pre-fill the product code (e.g. the uninstall command) and the install behavior.
+
+To audit an existing package — yours or anyone's — use **File → Inspect
+Package…** (⌘I): it shows the recorded metadata, verifies the HMAC, digest, and
+size exactly the way Intune's client would, lists the payload's files, and can
+save the decrypted payload zip.
 
 ## Signing the payload (optional)
 
@@ -111,6 +121,29 @@ signed **in place** in the source folder; and files that already carry a signatu
 are **skipped** (so vendor-signed installers are never clobbered). Plain `.cmd`/`.bat`
 scripts can't be Authenticode-signed and are excluded. Full details:
 [`docs/PAYLOAD-SIGNING.md`](docs/PAYLOAD-SIGNING.md).
+
+## Command line
+
+Everything the GUI does is also scriptable — one engine, two frontends. The
+`wraptune` CLI wraps, inspects, and extracts packages, so `.intunewin` builds can
+run in CI (the engine is pure managed .NET; it doesn't even need macOS).
+
+```bash
+# Wrap an installer (flags mirror the official IntuneWinAppUtil)
+wraptune pack -c ./source -s ./source/setup.msi -o ./out
+
+# Inspect + verify any .intunewin (exit 0 = valid, 1 = invalid)
+wraptune inspect ./out/setup.intunewin
+
+# Recover the decrypted payload zip
+wraptune extract ./out/setup.intunewin -o ./recovered
+```
+
+Payload-signing flags mirror the GUI (`--pfx`, `--pkcs11-module`, or the
+`--azure-endpoint/--azure-account/--azure-profile` trio); secrets are read from
+the `WRAPTUNE_SIGN_SECRET` / `WRAPTUNE_AZURE_TOKEN` environment variables — never
+from argv, which other local users can see in `ps`. Full reference and build
+instructions: [`docs/CLI.md`](docs/CLI.md).
 
 ## How it differs from the Windows WrapTune
 
@@ -158,6 +191,7 @@ Releasing (signing + notarization) is tag-driven via GitHub Actions; see
 src/WrapTuneMacOS.Packaging   The .intunewin engine (class library, no UI)
 src/WrapTuneMacOS.Signing     Optional payload Authenticode signing (in-process MacSign engine)
 src/WrapTuneMacOS             Avalonia desktop UI
+src/WrapTuneMacOS.Cli         wraptune CLI (pack / inspect / extract) on the same engine
 tests/                        Engine + signing validation (round-trip, golden, MSI, sign-then-wrap)
 tools/verify-intunewin.py     Independent package verifier
 build-macos.sh                publish → .app → sign → .dmg → notarize

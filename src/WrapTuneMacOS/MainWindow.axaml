@@ -20,6 +20,8 @@
                         <NativeMenuItemSeparator/>
                         <NativeMenuItem Header="Package" Gesture="Meta+R" Click="MenuPackage"/>
                         <NativeMenuItem Header="Open Output Folder" Click="MenuOpenOutput"/>
+                        <NativeMenuItemSeparator/>
+                        <NativeMenuItem Header="Inspect Package…" Gesture="Meta+I" Click="MenuInspectPackage"/>
                     </NativeMenu>
                 </NativeMenuItem.Menu>
             </NativeMenuItem>
