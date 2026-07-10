@@ -135,6 +135,35 @@ public sealed class DetectionXml
                 FileDigest = Req(enc, "FileDigest"),
                 FileDigestAlgorithm = enc.Element("FileDigestAlgorithm")?.Value ?? "SHA256",
             },
+            MsiInfo = ParseMsiInfo(root.Element("MsiInfo")),
+        };
+    }
+
+    private static MsiInfo? ParseMsiInfo(XElement? el)
+    {
+        if (el is null) return null;
+
+        string? S(string name) => el.Element(name)?.Value;
+        int I(string name) => el.Element(name)?.Value is { } v ? XmlConvert.ToInt32(v) : 0;
+        // XmlConvert (not bool.Parse): XML booleans are "true"/"false"/"1"/"0".
+        bool B(string name, bool whenAbsent = false) =>
+            el.Element(name)?.Value is { } v ? XmlConvert.ToBoolean(v) : whenAbsent;
+
+        return new MsiInfo
+        {
+            MsiProductCode = S("MsiProductCode"),
+            MsiProductVersion = S("MsiProductVersion"),
+            MsiPackageCode = S("MsiPackageCode"),
+            MsiUpgradeCode = S("MsiUpgradeCode"),
+            MsiPublisher = S("MsiPublisher"),
+            MsiExecutionContext = I("MsiExecutionContext"),
+            MsiRequiresLogon = B("MsiRequiresLogon"),
+            MsiRequiresReboot = B("MsiRequiresReboot"),
+            MsiIsMachineInstall = B("MsiIsMachineInstall", whenAbsent: true),
+            MsiIsUserInstall = B("MsiIsUserInstall"),
+            MsiIncludesServices = B("MsiIncludesServices"),
+            MsiContainsSystemRegistryKeys = B("MsiContainsSystemRegistryKeys"),
+            MsiContainsSystemFolders = B("MsiContainsSystemFolders"),
         };
     }
 }

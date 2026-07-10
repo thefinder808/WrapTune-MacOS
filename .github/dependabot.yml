@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    # Avalonia is deliberately pinned to the 11.x line — 12.x removes the
+    # classic DragEventArgs.Data API and needs a deliberate migration.
+    ignore:
+      - dependency-name: "Avalonia*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

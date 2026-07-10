@@ -7,6 +7,10 @@ namespace WrapTuneMacOS;
 /// <c>~/Library/Application Support/WrapTuneMacOS/settings.json</c>.
 /// Adapted from WrapTune; the Windows-only ExePath and Catalog fields are gone
 /// (the engine is built in and catalog signing isn't supported on macOS).
+///
+/// The UI thread and the background update check both persist settings, so all
+/// file I/O is serialized behind one gate; use <see cref="Update"/> for any
+/// read-modify-write or concurrent writers silently lose each other's fields.
 /// </summary>
 public sealed class AppSettings
 {
@@ -49,9 +53,16 @@ public sealed class AppSettings
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
+    /// <summary>Serializes all settings I/O — see the class remarks.</summary>
+    private static readonly object Gate = new();
+
+    /// <summary>Test seam: redirects the settings folder so persistence tests
+    /// never touch the user's real Application Support directory.</summary>
+    internal static string? BaseDirOverride;
+
     public static string GetSettingsPath()
     {
-        var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var baseDir = BaseDirOverride ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (string.IsNullOrEmpty(baseDir))
         {
             // Known .NET bug: LocalApplicationData can come back empty on some
@@ -66,29 +77,48 @@ public sealed class AppSettings
 
     public static AppSettings Load()
     {
-        var path = GetSettingsPath();
-        if (!File.Exists(path)) return new AppSettings();
-        try
+        lock (Gate)
         {
-            return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path)) ?? new AppSettings();
-        }
-        catch
-        {
-            return new AppSettings();
+            var path = GetSettingsPath();
+            if (!File.Exists(path)) return new AppSettings();
+            try
+            {
+                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path)) ?? new AppSettings();
+            }
+            catch
+            {
+                return new AppSettings();
+            }
         }
     }
 
     public void Save()
     {
-        var path = GetSettingsPath();
-        try
+        lock (Gate)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, JsonSerializer.Serialize(this, JsonOptions));
+            var path = GetSettingsPath();
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, JsonSerializer.Serialize(this, JsonOptions));
+            }
+            catch
+            {
+                // Best-effort: never crash on exit because settings couldn't be written.
+            }
         }
-        catch
+    }
+
+    /// <summary>Atomic load-mutate-save. The gate is held across the whole cycle,
+    /// so writers on different threads can't clobber each other's fields.</summary>
+    public static AppSettings Update(Action<AppSettings> mutate)
+    {
+        lock (Gate)
         {
-            // Best-effort: never crash on exit because settings couldn't be written.
+            var s = Load();
+            mutate(s);
+            s.Save();
+            return s;
         }
     }
 }

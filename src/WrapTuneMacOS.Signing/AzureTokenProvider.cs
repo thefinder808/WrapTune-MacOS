@@ -1,15 +1,19 @@
 namespace WrapTuneMacOS.Signing;
 
 /// <summary>
-/// Resolves the short-lived Azure access token jsign needs for Trusted Signing.
-/// Prefers a manually-supplied token (transient, never persisted); otherwise fetches
-/// a fresh one from the Azure CLI. Trusted Signing tokens expire in ~1 hour, so we
-/// fetch one per signing run rather than caching.
+/// Resolves the short-lived Azure access token the signing engine needs for
+/// Trusted Signing. Prefers a manually-supplied token (transient, never
+/// persisted); otherwise fetches a fresh one from the Azure CLI. Trusted Signing
+/// tokens expire in ~1 hour, so we fetch one per signing run rather than caching.
 /// </summary>
 internal static class AzureTokenProvider
 {
     /// <summary>The Trusted Signing resource the token must be scoped to.</summary>
     public const string Resource = "https://codesigning.azure.net";
+
+    /// <summary>Bound on the az shell-out — a stalled az (proxy, interactive
+    /// re-auth prompt) must not hang the "Signing payload…" step forever.</summary>
+    internal static readonly TimeSpan AzureCliTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Returns <c>(token, null)</c> on success, or <c>(null, error)</c> on failure.
@@ -31,13 +35,17 @@ internal static class AzureTokenProvider
             var (exit, stdout, stderr) = await ProcessRunner.RunAsync(
                 azPath,
                 ["account", "get-access-token", "--resource", Resource, "--query", "accessToken", "-o", "tsv"],
-                ct);
+                ct, AzureCliTimeout);
 
             var token = stdout.Trim();
             if (exit != 0 || token.Length == 0)
                 return (null, $"Azure CLI could not get a token ({FirstLine(stderr)}). Run `az login`, or paste a token.");
 
             return (token, null);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;   // cancellation is not an "Azure CLI failure"
         }
         catch (Exception ex)
         {

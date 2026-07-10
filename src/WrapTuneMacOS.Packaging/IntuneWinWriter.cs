@@ -25,8 +25,10 @@ public interface IIntuneWinPackager
 /// </summary>
 public sealed class IntuneWinWriter : IIntuneWinPackager
 {
-    /// <summary>Name of the encrypted content entry inside the package.</summary>
-    public const string ContentFileName = "IntunePackage.intunewin";
+    /// <summary>Name of the encrypted content entry inside the package. Single
+    /// source of truth is <see cref="DetectionXml.ContentFileName"/> — the zip
+    /// entry name and the &lt;FileName&gt; element must never diverge.</summary>
+    public const string ContentFileName = DetectionXml.ContentFileName;
 
     /// <summary>
     /// Reported in Detection.xml. Mirrors a recent official Content Prep Tool
@@ -56,6 +58,11 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
     private static PackageResult PackageCore(PackageRequest request, IProgress<string>? log, CancellationToken ct)
     {
         // ── Validate ────────────────────────────────────────────────────────
+        if (string.IsNullOrWhiteSpace(request.SourceFolder))
+            return PackageResult.Fail("Source folder is not specified.");
+        if (string.IsNullOrWhiteSpace(request.SetupFile))
+            return PackageResult.Fail("Setup file is not specified.");
+
         // TrimEndingDirectorySeparator so a user-supplied trailing slash on the
         // source folder doesn't break the containment check below.
         var sourceFolder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(request.SourceFolder));
@@ -101,8 +108,11 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
         try
         {
             ct.ThrowIfCancellationRequested();
+            WarnIfTempSpaceLow(sourceFolder, work, log);
 
             // ── 1. Zip the source folder (the unencrypted payload) ──────────
+            // NOTE: ZipFile.CreateFromDirectory has no cancellation hook, so a
+            // cancel during this stage takes effect at the next stage boundary.
             log?.Report("Zipping payload…");
             ZipFile.CreateFromDirectory(sourceFolder, innerZip, CompressionLevel.Optimal, includeBaseDirectory: false);
             var unencryptedSize = new FileInfo(innerZip).Length;
@@ -122,7 +132,7 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
             // ── 4-6. Encrypt + HMAC, streamed, into [Mac||IV||ciphertext] ──
             log?.Report("Encrypting (AES-256-CBC) and computing HMAC-SHA256…");
             ct.ThrowIfCancellationRequested();
-            EncryptToFile(innerZip, encrypted, encryptionKey, macKey, iv);
+            EncryptToFile(innerZip, encrypted, encryptionKey, macKey, iv, log, ct);
 
             // ── 7. MSI metadata (only for .msi setup files) ────────────────
             MsiInfo? msiInfo = null;
@@ -180,8 +190,11 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
     /// Encrypt <paramref name="sourcePath"/> into <paramref name="destPath"/> as
     /// <c>Mac(32) || IV(16) || ciphertext</c>. The HMAC (over IV+ciphertext) is
     /// computed in one streaming pass and back-filled into the leading 32 bytes.
+    /// Copies chunk-by-chunk so cancellation takes effect mid-file and progress
+    /// can be reported for multi-GB payloads.
     /// </summary>
-    private static void EncryptToFile(string sourcePath, string destPath, byte[] encryptionKey, byte[] macKey, byte[] iv)
+    private static void EncryptToFile(string sourcePath, string destPath, byte[] encryptionKey, byte[] macKey, byte[] iv,
+        IProgress<string>? log, CancellationToken ct)
     {
         using var hmac = IncrementalHash.CreateHMAC(HashAlgorithmName.SHA256, macKey);
         hmac.AppendData(iv);
@@ -203,7 +216,21 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
             using (var crypto = new CryptoStream(tee, encryptor, CryptoStreamMode.Write, leaveOpen: true))
             using (var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read))
             {
-                source.CopyTo(crypto);
+                var buffer = new byte[1 << 20];
+                long total = source.Length, done = 0;
+                int lastReported = 0, n;
+                while ((n = source.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    crypto.Write(buffer, 0, n);
+                    done += n;
+                    var pct = total > 0 ? (int)(done * 100 / total) : 100;
+                    if (pct >= lastReported + 10 && pct < 100)
+                    {
+                        log?.Report($"Encrypting… {pct}%");
+                        lastReported = pct;
+                    }
+                }
                 crypto.FlushFinalBlock();
             }
         }
@@ -211,6 +238,36 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
         var mac = hmac.GetHashAndReset();
         dest.Seek(0, SeekOrigin.Begin);
         dest.Write(mac);
+    }
+
+    /// <summary>Scratch files (inner zip + encrypted blob) live on the temp
+    /// volume and together need roughly twice the payload size there — which can
+    /// be a different, smaller volume than the output folder. Warn up front so a
+    /// mid-run disk-full IOException isn't the first sign.</summary>
+    private static void WarnIfTempSpaceLow(string sourceFolder, string workDir, IProgress<string>? log)
+    {
+        try
+        {
+            var needed = DirectorySizeBytes(sourceFolder) * 2;
+            var free = new DriveInfo(workDir).AvailableFreeSpace;
+            if (free < needed)
+                log?.Report($"WARNING  The temp volume has {free / (1024 * 1024)} MB free but packaging " +
+                            $"may need up to ~{needed / (1024 * 1024)} MB of scratch space.");
+        }
+        catch
+        {
+            // Best-effort advisory only — never block packaging on it.
+        }
+    }
+
+    internal static long DirectorySizeBytes(string root)
+    {
+        long total = 0;
+        foreach (var f in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+        {
+            try { total += new FileInfo(f).Length; } catch { /* unreadable entry — skip */ }
+        }
+        return total;
     }
 
     private static byte[] ReadMac(string encryptedPath)

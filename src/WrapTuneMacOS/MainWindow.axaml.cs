@@ -63,28 +63,30 @@ public partial class MainWindow : Window
 
     private void SaveCurrentSettings()
     {
-        // Load-mutate-save: fields this window doesn't own (the updater's check
-        // stamp / skipped version) must survive a save.
-        var s = AppSettings.Load();
-        s.SourceFolder = TxtSourceFolder.Text;
-        s.SetupFile = TxtSetupFile.Text;
-        s.OutputFolder = TxtOutputFolder.Text;
-        s.Theme = _theme;
-        s.Overwrite = ChkOverwrite.IsChecked == true;
+        // Atomic load-mutate-save: fields this window doesn't own (the updater's
+        // check stamp / skipped version) must survive a save, including against
+        // the background update check writing at the same time.
+        AppSettings.Update(s =>
+        {
+            s.SourceFolder = TxtSourceFolder.Text;
+            s.SetupFile = TxtSetupFile.Text;
+            s.OutputFolder = TxtOutputFolder.Text;
+            s.Theme = _theme;
+            s.Overwrite = ChkOverwrite.IsChecked == true;
 
-        s.SignPayload = ChkSignPayload.IsChecked == true;
-        s.SignCertMode = CurrentCertMode().ToString();
-        s.SignPfxPath = TxtPfxPath.Text;
-        s.SignPkcs11ModulePath = TxtPkcs11Module.Text;
-        s.SignPkcs11CertThumbprint = TxtPkcs11Thumbprint.Text;
-        s.SignTsEndpoint = TxtTsEndpoint.Text;
-        s.SignTsAccount = TxtTsAccount.Text;
-        s.SignTsProfile = TxtTsProfile.Text;
-        s.SignTimestampUrl = TxtTimestampUrl.Text;
-        s.SignDescription = TxtSignDescription.Text;
-        s.SignUrl = TxtSignUrl.Text;
-        s.SignAllFiles = ChkSignAllFiles.IsChecked == true;
-        s.Save();
+            s.SignPayload = ChkSignPayload.IsChecked == true;
+            s.SignCertMode = CurrentCertMode().ToString();
+            s.SignPfxPath = TxtPfxPath.Text;
+            s.SignPkcs11ModulePath = TxtPkcs11Module.Text;
+            s.SignPkcs11CertThumbprint = TxtPkcs11Thumbprint.Text;
+            s.SignTsEndpoint = TxtTsEndpoint.Text;
+            s.SignTsAccount = TxtTsAccount.Text;
+            s.SignTsProfile = TxtTsProfile.Text;
+            s.SignTimestampUrl = TxtTimestampUrl.Text;
+            s.SignDescription = TxtSignDescription.Text;
+            s.SignUrl = TxtSignUrl.Text;
+            s.SignAllFiles = ChkSignAllFiles.IsChecked == true;
+        });
     }
 
     private CertMode CurrentCertMode() =>
@@ -335,6 +337,8 @@ public partial class MainWindow : Window
 
         BtnOpenOutput.IsVisible = false;
         BtnPackage.IsEnabled = false;
+        BtnCancel.IsVisible = true;
+        BtnCancel.IsEnabled = true;
 
         // Progress<T> created on the UI thread marshals callbacks back to it.
         var progress = new Progress<string>(AppendOutput);
@@ -389,11 +393,19 @@ public partial class MainWindow : Window
         {
             SetStatus("Cancelled.", "Error");
         }
+        catch (Exception ex)
+        {
+            // Backstop for anything the signing engine or engine plumbing throws
+            // instead of returning a failure — an exception escaping this async
+            // void handler would take down the whole process.
+            Fail(ex.Message);
+        }
         finally
         {
             _cts?.Dispose();
             _cts = null;
             BtnPackage.IsEnabled = true;
+            BtnCancel.IsVisible = false;
         }
 
         void Fail(string message)
@@ -401,6 +413,15 @@ public partial class MainWindow : Window
             AppendOutput("ERROR  " + message);
             SetStatus(message, "Error");
         }
+    }
+
+    private void BtnCancel_Click(object? sender, RoutedEventArgs e)
+    {
+        // The zip stage can't be interrupted mid-stream (BCL limitation), so a
+        // cancel there lands at the next stage boundary — hence the status hint.
+        BtnCancel.IsEnabled = false;
+        SetStatus("Cancelling…", "Error");
+        _cts?.Cancel();
     }
 
     private async void BtnOpenOutput_Click(object? sender, RoutedEventArgs e)
@@ -555,10 +576,10 @@ public partial class MainWindow : Window
                 var r = await _updates.CheckAsync(CancellationToken.None);
                 if (r.Error is not null) return;   // failed check → don't stamp; retry next launch
 
-                // Stamp the check time only on a successful check.
-                var latest = AppSettings.Load();
-                latest.LastUpdateCheckUtc = DateTime.UtcNow.ToString("o");
-                latest.Save();
+                // Stamp the check time only on a successful check. Update (not
+                // Load+Save) so this background write can't clobber a UI-thread
+                // save that lands at the same moment.
+                var latest = AppSettings.Update(s => s.LastUpdateCheckUtc = DateTime.UtcNow.ToString("o"));
 
                 if (r.UpdateAvailable && r.Info is not null && r.Info.Version != latest.SkippedUpdateVersion)
                     Dispatcher.UIThread.Post(() => new UpdateWindow(r.Info, _updates).Show(this));

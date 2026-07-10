@@ -161,6 +161,30 @@ public sealed class RoundTripTests
     }
 
     [Fact]
+    public async Task Rejects_blank_source_folder_with_a_clear_message()
+    {
+        var result = await new IntuneWinWriter().PackageAsync(
+            new PackageRequest("", "setup.exe", "out", Overwrite: true));
+
+        Assert.False(result.Success);
+        Assert.Contains("Source folder", result.Error!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Rejects_blank_setup_file_with_a_clear_message()
+    {
+        var ws = new TestWorkspace();
+        using var _ = ws;
+        ws.AddSourceFile("setup.exe", "x"u8.ToArray());
+
+        var result = await new IntuneWinWriter().PackageAsync(
+            new PackageRequest(ws.Source, "  ", ws.Output, Overwrite: true));
+
+        Assert.False(result.Success);
+        Assert.Contains("Setup file", result.Error!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Rejects_setup_file_outside_source_folder()
     {
         var ws = new TestWorkspace();
@@ -177,6 +201,43 @@ public sealed class RoundTripTests
     }
 
     [Fact]
+    public async Task ReadToFile_streams_the_payload_to_disk_and_validates()
+    {
+        var (result, ws) = await PackSampleAsync();
+        using var _ = ws;
+
+        var dest = Path.Combine(ws.Output, "recovered.zip");
+        var contents = IntuneWinReader.ReadToFile(result.OutputPath!, dest);
+
+        Assert.True(contents.MacValid);
+        Assert.True(contents.DigestValid);
+        Assert.True(contents.SizeValid);
+        Assert.True(contents.IsValid);
+        Assert.True(File.Exists(dest));
+
+        var recovered = TestWorkspace.ReadZipEntries(File.ReadAllBytes(dest));
+        Assert.Equal(3, recovered.Count);
+        Assert.Equal("fake installer payload"u8.ToArray(), recovered["setup.exe"]);
+    }
+
+    [Fact]
+    public async Task ReadToFile_rejects_a_tampered_payload_without_writing_plaintext()
+    {
+        var (result, ws) = await PackSampleAsync();
+        using var _ = ws;
+
+        var tampered = Path.Combine(ws.Output, "tampered.intunewin");
+        RewriteWithFlippedContentByte(result.OutputPath!, tampered);
+
+        var dest = Path.Combine(ws.Output, "should-not-exist.zip");
+        var contents = IntuneWinReader.ReadToFile(tampered, dest);
+
+        Assert.False(contents.MacValid);
+        // Verify-then-decrypt: unauthenticated ciphertext is never decrypted to disk.
+        Assert.False(File.Exists(dest));
+    }
+
+    [Fact]
     public async Task Tampered_payload_fails_mac_validation()
     {
         var (result, ws) = await PackSampleAsync();
@@ -188,6 +249,17 @@ public sealed class RoundTripTests
 
         var contents = IntuneWinReader.Read(tampered);
         Assert.False(contents.MacValid, "A modified payload must fail HMAC validation.");
+    }
+
+    [Fact]
+    public void DirectorySizeBytes_sums_all_files_recursively()
+    {
+        var ws = new TestWorkspace();
+        using var _ = ws;
+        ws.AddSourceFile("a.bin", new byte[100]);
+        ws.AddSourceFile("sub/b.bin", new byte[250]);
+
+        Assert.Equal(350, IntuneWinWriter.DirectorySizeBytes(ws.Source));
     }
 
     private static void RewriteWithFlippedContentByte(string srcPackage, string destPackage)

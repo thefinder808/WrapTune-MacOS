@@ -26,7 +26,6 @@ import base64
 import binascii
 import hashlib
 import hmac
-import io
 import os
 import shutil
 import subprocess
@@ -43,6 +42,7 @@ PROFILE_IDENTIFIER = "ProfileVersion1"
 MAC_LEN = 32   # HMAC-SHA256 output / AES-256 key length
 KEY_LEN = 32
 IV_LEN = 16
+CHUNK = 1024 * 1024   # streaming I/O unit — packages can be multi-GB
 
 # ── tiny check-reporting harness ────────────────────────────────────────────
 
@@ -87,8 +87,9 @@ def b64decode_strict(value):
 
 # ── individual verification stages ──────────────────────────────────────────
 
-def read_container(path, rpt):
-    """Open the outer OPC zip; return (detection_xml_bytes, encrypted_blob)."""
+def read_container(path, rpt, workdir):
+    """Open the outer OPC zip; return (detection_xml_bytes, blob_path) with the
+    encrypted blob streamed to a scratch file — never held in memory."""
     section("1. Outer container")
     if not zipfile.is_zipfile(path):
         rpt.fail(f"Not a valid ZIP/OPC archive: {path}")
@@ -111,7 +112,10 @@ def read_container(path, rpt):
         if extra:
             rpt.warn(f"Unexpected extra entries (Intune ignores these): {sorted(extra)}")
 
-        return zf.read(METADATA_ENTRY), zf.read(CONTENTS_ENTRY)
+        blob_path = os.path.join(workdir, "content.bin")
+        with zf.open(CONTENTS_ENTRY) as src, open(blob_path, "wb") as dst:
+            shutil.copyfileobj(src, dst, CHUNK)
+        return zf.read(METADATA_ENTRY), blob_path
 
 
 def parse_detection(xml_bytes, rpt):
@@ -232,19 +236,22 @@ def _common_suffix_len(a, b):
     return n
 
 
-def verify_blob_layout(blob, keys, rpt):
-    """Check Mac||IV||ciphertext layout, header echo, and ciphertext block size."""
+def verify_blob_layout(blob_path, keys, rpt):
+    """Check Mac||IV||ciphertext layout, header echo, and ciphertext block size.
+    Returns the ciphertext length, or None when the blob can't hold a header."""
     section("4. Encrypted blob layout")
-    rpt.info(f"Blob length = {len(blob)} bytes")
+    size = os.path.getsize(blob_path)
+    rpt.info(f"Blob length = {size} bytes")
 
-    if not rpt.check(len(blob) >= MAC_LEN + IV_LEN,
+    if not rpt.check(size >= MAC_LEN + IV_LEN,
                      "Blob large enough for Mac(32) + IV(16) header",
-                     f"Blob too small ({len(blob)} bytes) for the 48-byte header"):
+                     f"Blob too small ({size} bytes) for the 48-byte header"):
         return None
 
-    header_mac = blob[:MAC_LEN]
-    header_iv = blob[MAC_LEN:MAC_LEN + IV_LEN]
-    ciphertext = blob[MAC_LEN + IV_LEN:]
+    with open(blob_path, "rb") as f:
+        header_mac = f.read(MAC_LEN)
+        header_iv = f.read(IV_LEN)
+    ct_len = size - MAC_LEN - IV_LEN
 
     rpt.check(header_mac == keys["Mac"],
               "Blob header Mac matches Detection.xml <Mac>",
@@ -252,16 +259,21 @@ def verify_blob_layout(blob, keys, rpt):
     rpt.check(header_iv == keys["InitializationVector"],
               "Blob header IV matches Detection.xml <InitializationVector>",
               "Blob header IV differs from Detection.xml <InitializationVector>")
-    rpt.check(len(ciphertext) > 0 and len(ciphertext) % 16 == 0,
-              f"Ciphertext is a whole number of AES blocks ({len(ciphertext)} B = {len(ciphertext)//16} × 16)",
-              f"Ciphertext length {len(ciphertext)} is not a positive multiple of 16")
-    return ciphertext
+    rpt.check(ct_len > 0 and ct_len % 16 == 0,
+              f"Ciphertext is a whole number of AES blocks ({ct_len} B = {ct_len//16} × 16)",
+              f"Ciphertext length {ct_len} is not a positive multiple of 16")
+    return ct_len
 
 
-def verify_hmac(blob, keys, rpt):
+def verify_hmac(blob_path, keys, rpt):
     """The authenticity check Intune performs: HMAC(MacKey, IV||ciphertext)."""
     section("5. HMAC authentication (the gate Intune enforces)")
-    computed = hmac.new(keys["MacKey"], blob[MAC_LEN:], hashlib.sha256).digest()
+    h = hmac.new(keys["MacKey"], digestmod=hashlib.sha256)
+    with open(blob_path, "rb") as f:
+        f.seek(MAC_LEN)
+        for chunk in iter(lambda: f.read(CHUNK), b""):
+            h.update(chunk)
+    computed = h.digest()
     ok = hmac.compare_digest(computed, keys["Mac"])
     rpt.check(ok,
               "HMAC-SHA256(MacKey, IV‖ciphertext) == stored Mac",
@@ -272,59 +284,65 @@ def verify_hmac(blob, keys, rpt):
     return ok
 
 
-def decrypt_payload(ciphertext, keys, rpt):
-    """AES-256-CBC decrypt via openssl. Returns plaintext bytes or None."""
+def decrypt_payload(blob_path, keys, rpt, workdir):
+    """AES-256-CBC decrypt via openssl. Returns the plaintext file path or None.
+    Everything stays on disk — a multi-GB payload never enters Python memory."""
     section("6. AES-256-CBC decryption (independent: openssl)")
     openssl = shutil.which("openssl")
     if not openssl:
-        rpt.warn("openssl not found on PATH — skipping decryption-dependent checks "
-                 "(digest, size, payload). HMAC result above still stands.")
+        # A missing decryptor means digest/size/payload/SetupFile can't be
+        # verified at all — that must read as REJECT, never "PASS (with
+        # warnings)", or a truncated payload sails through on a bare machine.
+        rpt.fail("openssl not found on PATH — cannot decrypt, so the digest, size, "
+                 "and payload checks are impossible. Install openssl and re-run.")
         return None
 
-    with tempfile.TemporaryDirectory(prefix="verify-intunewin-") as tmp:
-        cin = os.path.join(tmp, "cipher.bin")
-        cout = os.path.join(tmp, "plain.bin")
-        with open(cin, "wb") as f:
-            f.write(ciphertext)
-        # -K/-iv (raw hex) bypass openssl's password KDF + "Salted__" header, so
-        # the input is treated as raw ciphertext. PKCS7 padding is stripped by
-        # default; a bad key/padding makes openssl exit non-zero ("bad decrypt").
-        cmd = [openssl, "enc", "-d", "-aes-256-cbc",
-               "-K", keys["EncryptionKey"].hex(),
-               "-iv", keys["InitializationVector"].hex(),
-               "-in", cin, "-out", cout]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        if proc.returncode != 0:
-            rpt.fail("openssl could not decrypt (bad key or corrupt PKCS7 padding).")
-            if proc.stderr.strip():
-                rpt.info(proc.stderr.strip())
-            return None
-        with open(cout, "rb") as f:
-            plaintext = f.read()
+    cin = os.path.join(workdir, "cipher.bin")
+    cout = os.path.join(workdir, "plain.bin")
+    with open(blob_path, "rb") as src, open(cin, "wb") as dst:
+        src.seek(MAC_LEN + IV_LEN)
+        shutil.copyfileobj(src, dst, CHUNK)
+    # -K/-iv (raw hex) bypass openssl's password KDF + "Salted__" header, so
+    # the input is treated as raw ciphertext. PKCS7 padding is stripped by
+    # default; a bad key/padding makes openssl exit non-zero ("bad decrypt").
+    cmd = [openssl, "enc", "-d", "-aes-256-cbc",
+           "-K", keys["EncryptionKey"].hex(),
+           "-iv", keys["InitializationVector"].hex(),
+           "-in", cin, "-out", cout]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        rpt.fail("openssl could not decrypt (bad key or corrupt PKCS7 padding).")
+        if proc.stderr.strip():
+            rpt.info(proc.stderr.strip())
+        return None
 
-    rpt.ok(f"Decrypted to {len(plaintext)} bytes of plaintext.")
-    return plaintext
+    rpt.ok(f"Decrypted to {os.path.getsize(cout)} bytes of plaintext.")
+    return cout
 
 
-def verify_plaintext(plaintext, d, keys, rpt):
+def verify_plaintext(plain_path, d, keys, rpt):
     """Size, digest, and payload-zip checks against the recovered plaintext."""
     section("7. Payload integrity")
 
     declared_size = int(d["UnencryptedContentSize"])
-    rpt.check(len(plaintext) == declared_size,
+    actual_size = os.path.getsize(plain_path)
+    rpt.check(actual_size == declared_size,
               f"Plaintext length == UnencryptedContentSize ({declared_size})",
-              f"Plaintext is {len(plaintext)} bytes but UnencryptedContentSize = {declared_size}")
+              f"Plaintext is {actual_size} bytes but UnencryptedContentSize = {declared_size}")
 
-    digest = hashlib.sha256(plaintext).digest()
-    rpt.check(hmac.compare_digest(digest, keys["FileDigest"]),
+    sha = hashlib.sha256()
+    with open(plain_path, "rb") as f:
+        for chunk in iter(lambda: f.read(CHUNK), b""):
+            sha.update(chunk)
+    rpt.check(hmac.compare_digest(sha.digest(), keys["FileDigest"]),
               "SHA-256(plaintext) == FileDigest",
               "SHA-256(plaintext) != FileDigest — payload does not match its recorded digest.")
 
     section("8. Recovered payload contents")
-    if not zipfile.is_zipfile(io.BytesIO(plaintext)):
+    if not zipfile.is_zipfile(plain_path):
         rpt.fail("Recovered payload is not a valid ZIP archive.")
         return
-    with zipfile.ZipFile(io.BytesIO(plaintext)) as pz:
+    with zipfile.ZipFile(plain_path) as pz:
         entries = pz.namelist()
         rpt.ok(f"Payload is a valid ZIP with {len(entries)} entr"
                f"{'y' if len(entries) == 1 else 'ies'}.")
@@ -377,27 +395,28 @@ def main():
     print(f"\033[1mVerifying:\033[0m {args.file}")
     rpt = Report()
 
-    xml_bytes, blob = read_container(args.file, rpt)
-    if xml_bytes is None:
-        return _verdict(rpt)
+    with tempfile.TemporaryDirectory(prefix="verify-intunewin-") as workdir:
+        xml_bytes, blob_path = read_container(args.file, rpt, workdir)
+        if xml_bytes is None:
+            return _verdict(rpt)
 
-    d = parse_detection(xml_bytes, rpt)
-    if d is None:
-        return _verdict(rpt)
+        d = parse_detection(xml_bytes, rpt)
+        if d is None:
+            return _verdict(rpt)
 
-    keys = decode_crypto(d, rpt)
-    if keys is None:
-        return _verdict(rpt)
+        keys = decode_crypto(d, rpt)
+        if keys is None:
+            return _verdict(rpt)
 
-    ciphertext = verify_blob_layout(blob, keys, rpt)
-    verify_hmac(blob, keys, rpt)
+        ct_len = verify_blob_layout(blob_path, keys, rpt)
+        verify_hmac(blob_path, keys, rpt)
 
-    if ciphertext is not None:
-        plaintext = decrypt_payload(ciphertext, keys, rpt)
-        if plaintext is not None:
-            verify_plaintext(plaintext, d, keys, rpt)
+        if ct_len is not None:
+            plain_path = decrypt_payload(blob_path, keys, rpt, workdir)
+            if plain_path is not None:
+                verify_plaintext(plain_path, d, keys, rpt)
 
-    verify_msi(d, rpt)
+        verify_msi(d, rpt)
     return _verdict(rpt)
 
 
