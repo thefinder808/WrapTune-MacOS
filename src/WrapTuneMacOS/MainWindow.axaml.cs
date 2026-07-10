@@ -542,11 +542,20 @@ public partial class MainWindow : Window
             if (signing)
             {
                 ActivateStage(PackageStage.Sign);
-                var options = BuildSigningOptions();
-                var signer = PayloadSigner.TryCreate(options, out var locateError);
-                if (signer is null) { FailRun(PackageStage.Sign, locateError!); return; }
+                var options = BuildSigningOptions();   // reads controls — must stay on the UI thread
 
-                var signed = await signer.SignAsync(source, setup, options, progress, _cts.Token);
+                // Task.Run for the same reason PackageAsync uses it internally:
+                // the in-process signing engine does synchronous crypto and
+                // network work (Azure endpoint, TSA) before/without yielding,
+                // which beachballs the UI thread if called from it.
+                var ct = _cts.Token;
+                var signed = await Task.Run(async () =>
+                {
+                    var signer = PayloadSigner.TryCreate(options, out var locateError);
+                    if (signer is null) return SignResult.Fail(locateError!);
+                    return await signer.SignAsync(source, setup, options, progress, ct);
+                });
+
                 if (!signed.Success) { FailRun(PackageStage.Sign, signed.Error!); return; }
                 SetStageDone(PackageStage.Sign, PackagingFlow.SignStageDetail(CurrentCertMode(), TxtPfxPath.Text));
             }
