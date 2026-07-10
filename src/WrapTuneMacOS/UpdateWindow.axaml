@@ -67,8 +67,8 @@
              action from clipping on this narrow fixed-width dialog. -->
         <StackPanel Spacing="6" Margin="0,6,0,0">
             <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                <Button Classes="link" Content="Release page ↗" Click="OnOpenReleasePage"/>
-                <Button Classes="link" Content="Skip this version" Click="OnSkip"/>
+                <Button x:Name="BtnReleasePage" Classes="link" Content="Release page ↗" Click="OnOpenReleasePage"/>
+                <Button x:Name="BtnSkip" Classes="link" Content="Skip this version" Click="OnSkip"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
                 <Button x:Name="BtnLater" Classes="quiet" Content="Later" IsCancel="True" Click="OnLater"/>

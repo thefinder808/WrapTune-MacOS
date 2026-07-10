@@ -17,6 +17,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Tests exercise internal seams (e.g. the AppSettings folder override). -->
+    <InternalsVisibleTo Include="WrapTuneMacOS.App.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.17" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.17" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.17" />

@@ -29,6 +29,10 @@ public sealed class SmokeTests
         var open = w.FindControl<Button>("BtnOpenOutput");
         Assert.NotNull(open);
         Assert.False(open!.IsVisible);   // hidden until a package succeeds
+
+        var cancel = w.FindControl<Button>("BtnCancel");
+        Assert.NotNull(cancel);
+        Assert.False(cancel!.IsVisible); // shown only while a package run is in flight
     }
 
     [AvaloniaFact]

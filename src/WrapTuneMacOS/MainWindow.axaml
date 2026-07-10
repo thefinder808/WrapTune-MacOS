@@ -392,14 +392,17 @@
         </ScrollViewer>
 
         <!-- Footer (pinned) -->
-        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto">
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto,Auto">
             <TextBlock x:Name="TxtStatus" Grid.Column="0" Text="Ready"
                        VerticalAlignment="Center" FontSize="11.5"
                        Foreground="{DynamicResource Dimmer}"/>
             <Button x:Name="BtnOpenOutput" Grid.Column="1" Margin="0,0,10,0"
                     Classes="secondary" Content="Open output" IsVisible="False"
                     Click="BtnOpenOutput_Click"/>
-            <Button x:Name="BtnPackage" Grid.Column="2" Classes="primary"
+            <Button x:Name="BtnCancel" Grid.Column="2" Margin="0,0,10,0"
+                    Classes="secondary" Content="Cancel" IsVisible="False"
+                    Click="BtnCancel_Click"/>
+            <Button x:Name="BtnPackage" Grid.Column="3" Classes="primary"
                     Content="Package" Click="BtnPackage_Click"/>
         </Grid>
     </Grid>

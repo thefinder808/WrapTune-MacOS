@@ -59,7 +59,15 @@ public sealed class UpdateService
 
     private readonly HttpClient _http;
 
-    public UpdateService(HttpClient? http = null) => _http = http ?? new HttpClient();
+    /// <summary>Deadline for the release-check API call (its own linked token —
+    /// the client itself must not impose one, see the ctor).</summary>
+    private static readonly TimeSpan CheckTimeout = TimeSpan.FromSeconds(30);
+
+    // HttpClient.Timeout covers the WHOLE request including a streamed body, so
+    // the stock 100 s would abort a DMG download on any slow connection. Requests
+    // that need a deadline (the API check) bring their own token instead.
+    public UpdateService(HttpClient? http = null) =>
+        _http = http ?? new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
 
     // ── Version identity ─────────────────────────────────────────────────────
 
@@ -148,11 +156,19 @@ public sealed class UpdateService
             req.Headers.UserAgent.Add(new ProductInfoHeaderValue("WrapTuneMacOS", current));
             req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
 
-            using var resp = await _http.SendAsync(req, ct);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            deadline.CancelAfter(CheckTimeout);
+
+            using var resp = await _http.SendAsync(req, deadline.Token);
+            if (resp.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                // Unauthenticated GitHub API calls are capped per IP; behind a
+                // shared NAT this is far likelier than a real outage.
+                return new UpdateCheckResult(false, null,
+                    "GitHub returned 403 — likely the API rate limit; try again later.");
             if (!resp.IsSuccessStatusCode)
                 return new UpdateCheckResult(false, null, $"GitHub returned {(int)resp.StatusCode}.");
 
-            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(deadline.Token));
             var root = doc.RootElement;
             var tag = root.GetProperty("tag_name").GetString() ?? "";
             if (!IsNewer(tag, current))
@@ -175,6 +191,8 @@ public sealed class UpdateService
                 AssetUrl: asset.GetProperty("browser_download_url").GetString() ?? "");
             return new UpdateCheckResult(true, info, null);
         }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        { return new UpdateCheckResult(false, null, "GitHub didn't respond within 30 seconds."); }
         catch (OperationCanceledException) { return new UpdateCheckResult(false, null, "Canceled."); }
         catch (Exception ex) { return new UpdateCheckResult(false, null, ex.Message); }
     }
@@ -291,6 +309,13 @@ public sealed class UpdateService
                 if (total is > 0) progress?.Report((double)read / total.Value);
             }
             return dest;
+        }
+        catch (OperationCanceledException)
+        {
+            // User cancellation is not a download failure — clean up and let the
+            // caller's cancellation handling take it from here.
+            if (dest is not null) TryDelete(dest);
+            throw;
         }
         catch { if (dest is not null) TryDelete(dest); return null; }
     }
@@ -441,7 +466,16 @@ public sealed class UpdateService
         proc.Start();
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
-        await proc.WaitForExitAsync(ct);
+        try
+        {
+            await proc.WaitForExitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Disposing only releases handles; don't leave hdiutil/codesign running.
+            try { proc.Kill(entireProcessTree: true); } catch { /* already exited */ }
+            throw;
+        }
 
         return (proc.ExitCode, stdout.ToString(), stderr.ToString());
     }

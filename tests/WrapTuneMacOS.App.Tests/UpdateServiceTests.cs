@@ -85,4 +85,34 @@ public sealed class UpdateServiceTests
         Assert.NotNull(w.FindControl<Button>("BtnInstall"));
         Assert.NotNull(w.FindControl<Button>("BtnLater"));
     }
+
+    [AvaloniaFact]
+    public void UpdateWindow_names_every_footer_button_so_install_can_disable_them()
+    {
+        // All four must be reachable from code-behind: an in-flight install has
+        // to disable Skip too, or skipping can force-quit the app when the
+        // background install completes.
+        var info = new UpdateInfo("9.9.9", "", "", "x.dmg", "https://example.test/x.dmg");
+        var w = new UpdateWindow(info, new UpdateService());
+        w.Show();
+
+        Assert.NotNull(w.FindControl<Button>("BtnInstall"));
+        Assert.NotNull(w.FindControl<Button>("BtnLater"));
+        Assert.NotNull(w.FindControl<Button>("BtnSkip"));
+        Assert.NotNull(w.FindControl<Button>("BtnReleasePage"));
+    }
+
+    [Fact]
+    public async Task DownloadAsync_propagates_cancellation_instead_of_reporting_failure()
+    {
+        // A cancelled download must not surface as "Download failed" — the
+        // dialog distinguishes user cancellation from real errors.
+        var svc = new UpdateService();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var info = new UpdateInfo("1.0.0", "", "", "x.dmg", "https://example.invalid/x.dmg");
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => svc.DownloadAsync(info, progress: null, cts.Token));
+    }
 }
