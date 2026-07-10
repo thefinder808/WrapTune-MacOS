@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: nuget
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     # One grouped PR per run instead of a PR per package — each PR costs a
     # macos-latest CI job, and those runners have a low concurrency cap.
     groups:
@@ -19,7 +19,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       actions-all:
         patterns: ["*"]
