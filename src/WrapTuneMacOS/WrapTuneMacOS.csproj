@@ -12,6 +12,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Space Grotesk + JetBrains Mono (both OFL; licenses alongside the .ttf files). -->
+    <AvaloniaResource Include="Assets/**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\WrapTuneMacOS.Packaging\WrapTuneMacOS.Packaging.csproj" />
     <ProjectReference Include="..\WrapTuneMacOS.Signing\WrapTuneMacOS.Signing.csproj" />
   </ItemGroup>
