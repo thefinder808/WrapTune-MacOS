@@ -437,11 +437,10 @@ public partial class MainWindow : Window
         Step2Badge.Classes.Set("active", signingOn);
         TxtSignHint.IsVisible = !signingOn;
 
-        // Step 3 preview wakes up once everything upstream is satisfied.
-        Card3.Classes.Set("preview", !allValid);
-        TxtPackageHint.Text = ready && !string.IsNullOrWhiteSpace(TxtSetupFile.Text)
-            ? $"→ {Path.GetFileNameWithoutExtension(TxtSetupFile.Text)}.intunewin"
-            : "→ output.intunewin";
+        // Output preview appears in the footer once there's something to show.
+        TxtPackageHint.IsVisible = ready && !string.IsNullOrWhiteSpace(TxtSetupFile.Text);
+        if (TxtPackageHint.IsVisible)
+            TxtPackageHint.Text = $"→ {Path.GetFileNameWithoutExtension(TxtSetupFile.Text)}.intunewin";
 
         BtnPackage.IsEnabled = allValid;
         KbdChip.IsVisible = allValid;
@@ -643,6 +642,7 @@ public partial class MainWindow : Window
         BtnPackage.IsVisible = false;
         BtnOpenOutput.IsVisible = false;
         KbdChip.IsVisible = false;
+        TxtPackageHint.IsVisible = false;
         BtnCancel.IsVisible = true;
         BtnCancel.IsEnabled = true;
         BtnRawLog.IsVisible = true;
