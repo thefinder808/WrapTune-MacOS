@@ -54,7 +54,10 @@ internal sealed class CompoundFile
         int entriesPerSector = _sectorSize / 4;
         uint dif = firstDifatSector;
         int guard = 0;
-        while (dif != EndOfChain && dif != FreeSect && guard++ < GuardLimit)
+        // A corrupt/crafted file can make any chain loop back on itself; the
+        // visited sets bail on the first revisit so a cycle can't grow memory.
+        var seenDifat = new HashSet<uint>();
+        while (dif != EndOfChain && dif != FreeSect && guard++ < GuardLimit && seenDifat.Add(dif))
         {
             long off = SectorOffset(dif);
             for (int i = 0; i < entriesPerSector - 1; i++)
@@ -115,7 +118,8 @@ internal sealed class CompoundFile
         using var ms = new MemoryStream();
         uint s = start;
         int guard = 0;
-        while (s != EndOfChain && s != FreeSect && s < _fat.Length && guard++ < GuardLimit)
+        var seen = new HashSet<uint>();
+        while (s != EndOfChain && s != FreeSect && s < _fat.Length && guard++ < GuardLimit && seen.Add(s))
         {
             long off = SectorOffset(s);
             if (off < 0 || off + _sectorSize > _data.Length) break;
@@ -130,7 +134,8 @@ internal sealed class CompoundFile
         using var ms = new MemoryStream();
         uint s = start;
         int guard = 0;
-        while (s != EndOfChain && s != FreeSect && s < _miniFat.Length && guard++ < GuardLimit)
+        var seen = new HashSet<uint>();
+        while (s != EndOfChain && s != FreeSect && s < _miniFat.Length && guard++ < GuardLimit && seen.Add(s))
         {
             long off = (long)s * _miniSectorSize;
             if (off < 0 || off + _miniSectorSize > _miniStream.Length) break;
