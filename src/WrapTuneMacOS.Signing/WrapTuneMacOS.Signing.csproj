@@ -17,10 +17,10 @@
          MSI, PKCS#11 tokens, and Azure Trusted Signing. Signing happens in-process —
          these replaced the osslsigncode/jsign shell-outs that v1.1.x required users
          to brew-install. -->
-    <PackageReference Include="MacSign.Signing" Version="1.2.0" />
-    <PackageReference Include="MacSign.Signing.Msi" Version="1.2.0" />
-    <PackageReference Include="MacSign.Signing.Pkcs11" Version="1.2.0" />
-    <PackageReference Include="MacSign.Signing.Azure" Version="1.2.0" />
+    <PackageReference Include="MacSign.Signing" Version="1.4.0" />
+    <PackageReference Include="MacSign.Signing.Msi" Version="1.4.0" />
+    <PackageReference Include="MacSign.Signing.Pkcs11" Version="1.4.0" />
+    <PackageReference Include="MacSign.Signing.Azure" Version="1.4.0" />
   </ItemGroup>
 
 </Project>
