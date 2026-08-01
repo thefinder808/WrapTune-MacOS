@@ -52,6 +52,7 @@ public partial class MainWindow : Window
         ApplyTheme(_theme);
         WireDragDrop();
         WireDerivedFields();
+        WireSigningRefresh();
         UpdateSigningUi();
         UpdateFlowUi();
         Opened += (_, _) => StartLaunchUpdateCheck();
@@ -380,6 +381,22 @@ public partial class MainWindow : Window
         TxtSourceFolder.TextChanged += (_, _) => OnPathsChanged();
         TxtSetupFile.TextChanged += (_, _) => OnPathsChanged();
         TxtOutputFolder.TextChanged += (_, _) => OnPathsChanged();
+    }
+
+    /// <summary>Every input <see cref="ValidateSigningInputs"/> reads refreshes the
+    /// footer as it changes; no debounce — these checks are cheap and local,
+    /// unlike the path fields' folder-walk.</summary>
+    private void WireSigningRefresh()
+    {
+        TextBox[] validated =
+        [
+            TxtPfxPath, TxtSecret,
+            TxtPkcs11Module,
+            TxtTsEndpoint, TxtTsAccount, TxtTsProfile, TxtTsToken,
+        ];
+        foreach (var box in validated)
+            box.TextChanged += (_, _) => UpdateFlowUi();
+        ChkSignAllFiles.IsCheckedChanged += (_, _) => UpdateFlowUi();
     }
 
     private void OnPathsChanged()
