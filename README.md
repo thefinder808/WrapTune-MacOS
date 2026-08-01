@@ -11,7 +11,7 @@ into `.intunewin` packages without leaving macOS.
 > The packages this produces deploy to **Windows** endpoints through Intune. This
 > app builds them from a Mac — it doesn't change what they target.
 
-![WrapTune building an .intunewin package](docs/images/hero.png)
+<img src="docs/images/hero.png" alt="WrapTune building an .intunewin package" width="792">
 
 ## Why this exists
 
@@ -65,7 +65,7 @@ nowhere in the chain.
   Only a notarized, Developer-ID-signed build is ever installed.
 - Signed **and notarized** universal release (Apple Silicon + Intel).
 
-![WrapTune in light theme](docs/images/light-mode.png)
+<img src="docs/images/light-mode.png" alt="WrapTune in light theme" width="792">
 
 ## Install
 
@@ -87,7 +87,7 @@ build is notarized, Gatekeeper accepts it without the right-click-Open workaroun
    assemble, with the raw engine log behind the *raw log* disclosure — then
    upload the result in the Intune admin center as a **Windows app (Win32)**.
 
-![WrapTune's staged packaging progress](docs/images/packaging.png)
+<img src="docs/images/packaging.png" alt="WrapTune's staged packaging progress" width="792">
 
 For `.msi` setup files, the package includes the MSI metadata Intune reads to
 pre-fill the product code (e.g. the uninstall command) and the install behavior.
