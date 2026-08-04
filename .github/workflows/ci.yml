@@ -19,9 +19,12 @@ concurrency:
 jobs:
   test:
     runs-on: macos-latest
-    # A wedged test host otherwise squats on a macOS runner for GitHub's
-    # 6-hour default while everything else queues behind it.
-    timeout-minutes: 15
+    # Backstop only. The per-step timeouts below are sized to fire first, on
+    # purpose: a step timeout fails the step and lets the job finish, so its
+    # logs are retained. A *job* timeout cancels the run, and GitHub keeps no
+    # logs for a cancelled run at all -- which is exactly why the 2026-07 and
+    # 2026-08-04 hangs were never diagnosed.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -33,12 +36,31 @@ jobs:
       - name: Install osslsigncode (for signing tests)
         run: brew install osslsigncode
 
-      # blame-hang: if the run wedges, vstest names the running test, dumps,
-      # and fails within 8 minutes instead of hanging silently.
+      # These three were one `dotnet test` until 2026-08-04. That hid which
+      # phase a hang was in: --blame-hang only watches test *execution*, so a
+      # wedge in restore or build produced no dump, no failing test name, and
+      # no named step -- an opaque 15-minute stall. Split so the guilty phase
+      # identifies itself even if nothing else survives. Normal total is ~40s;
+      # the budgets are deliberately loose so only a real wedge trips them.
+      #
+      # Deliberately NOT caching ~/.nuget/packages yet: restore is the leading
+      # suspect, and a warm cache would mask the very phase we need to observe.
+      # Revisit once a hang has been caught in a named step.
+      - name: Restore
+        timeout-minutes: 5
+        run: dotnet restore --verbosity normal
+
+      - name: Build
+        timeout-minutes: 5
+        run: dotnet build --configuration Release --no-restore
+
+      # blame-hang fires at 4m, inside this step's 8m budget, so the dump is
+      # written and uploaded rather than lost to the step timeout.
       - name: Test
+        timeout-minutes: 8
         run: >
-          dotnet test --configuration Release
-          --blame-hang --blame-hang-timeout 8m --blame-hang-dump-type mini
+          dotnet test --configuration Release --no-build
+          --blame-hang --blame-hang-timeout 4m --blame-hang-dump-type mini
 
       - name: Upload hang dumps
         if: failure()
