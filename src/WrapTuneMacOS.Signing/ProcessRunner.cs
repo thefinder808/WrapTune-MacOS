@@ -9,7 +9,8 @@ namespace WrapTuneMacOS.Signing;
 /// paths with spaces and shell metacharacters cannot be misinterpreted or
 /// injected. A cancelled or timed-out run kills the child process tree —
 /// disposing a <see cref="Process"/> only releases handles, it never
-/// terminates the OS process.
+/// terminates the OS process. The child's stdin is closed at start, so a tool
+/// that reads input gets EOF instead of inheriting ours and blocking on it.
 /// </summary>
 internal static class ProcessRunner
 {
@@ -20,6 +21,7 @@ internal static class ProcessRunner
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -34,6 +36,7 @@ internal static class ProcessRunner
         proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) stderr.AppendLine(e.Data); };
 
         proc.Start();
+        proc.StandardInput.Close();   // EOF for the child; nothing here ever writes to it
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
 

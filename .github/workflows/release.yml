@@ -12,6 +12,10 @@ jobs:
   macos:
     runs-on: macos-latest
     environment: release   # env-scoped secrets (see docs/RELEASE-SIGNING.md)
+    # Backstop only, replacing GitHub's 6 h default. The step timeouts below
+    # (5+5+8+60 = 78) are sized to fire first: a step timeout fails the step
+    # and keeps the logs; a job timeout cancels the run and GitHub keeps none.
+    timeout-minutes: 90
     env:
       # Empty until the secrets are added → the build degrades to UNSIGNED.
       SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
@@ -31,8 +35,35 @@ jobs:
       - name: Install osslsigncode (for signing tests)
         run: brew install osslsigncode
 
+      # Same Restore / Build / Test split and budgets as ci.yml, so a hang names
+      # its phase and test instead of sitting silently. The 2026-10-27 v2.0.2
+      # run wedged here for 15+ min inside WrapTuneMacOS.Signing.Tests with no
+      # timeout at all.
+      - name: Restore
+        timeout-minutes: 5
+        run: dotnet restore --verbosity normal
+
+      - name: Build
+        timeout-minutes: 5
+        run: dotnet build --configuration Release --no-restore
+
+      # blame-hang fires at 4m, inside this step's 8m budget, so the dump is
+      # written and uploaded rather than lost to the step timeout.
       - name: Test
-        run: dotnet test --configuration Release
+        timeout-minutes: 8
+        run: >
+          dotnet test --configuration Release --no-build
+          --blame-hang --blame-hang-timeout 4m --blame-hang-dump-type mini
+
+      - name: Upload hang dumps
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-hang-diagnostics
+          path: |
+            **/TestResults/**/*.dmp
+            **/TestResults/**/Sequence_*.xml
+          if-no-files-found: ignore
 
       - name: Version from tag
         id: ver
@@ -64,6 +95,8 @@ jobs:
           echo "NOTARY_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
 
       - name: Build, sign, notarize (arm64 + x64)
+        # Two notarizations; normally a few minutes each. Generous on purpose.
+        timeout-minutes: 60
         env:
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
