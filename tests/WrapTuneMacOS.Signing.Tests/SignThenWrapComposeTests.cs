@@ -51,7 +51,7 @@ public sealed class SignThenWrapComposeTests
             var recovered = ExtractEntry(contents.DecryptedZip, "install.ps1");
             var verifyPath = Path.Combine(root, "recovered.ps1");
             await File.WriteAllBytesAsync(verifyPath, recovered);
-            var (_, vOut, vErr) = await ProcessRunner.RunAsync(ossl, ["verify", "-in", verifyPath]);
+            var (_, vOut, vErr) = await ProcessRunner.RunAsync(ossl, ["verify", "-in", verifyPath], default, SigningTestEnv.ToolTimeout);
             Assert.DoesNotContain("No signature found", vOut + "\n" + vErr, StringComparison.OrdinalIgnoreCase);
         }
         finally

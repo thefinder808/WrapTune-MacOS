@@ -24,10 +24,25 @@ public sealed class ProcessRunnerTests
         var stub = WriteStub("echo out-line\necho err-line >&2\nexit 3\n");
         try
         {
-            var (exit, stdout, stderr) = await ProcessRunner.RunAsync(stub, []);
+            var (exit, stdout, stderr) = await ProcessRunner.RunAsync(stub, [], default, SigningTestEnv.ToolTimeout);
             Assert.Equal(3, exit);
             Assert.Contains("out-line", stdout);
             Assert.Contains("err-line", stderr);
+        }
+        finally { File.Delete(stub); }
+    }
+
+    [Fact]
+    public async Task Child_reading_stdin_gets_EOF_instead_of_blocking()
+    {
+        // `cat` with no file reads stdin until EOF. With stdin closed it exits at
+        // once; inheriting the testhost's stdin it could wait forever.
+        var stub = WriteStub("cat\necho done\n");
+        try
+        {
+            var (exit, stdout, _) = await ProcessRunner.RunAsync(stub, [], default, TimeSpan.FromSeconds(10));
+            Assert.Equal(0, exit);
+            Assert.Contains("done", stdout);
         }
         finally { File.Delete(stub); }
     }

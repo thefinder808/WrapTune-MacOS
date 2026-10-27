@@ -13,6 +13,14 @@ internal static class SigningTestEnv
 {
     public const string Password = "testpw";
 
+    /// <summary>
+    /// Budget for every openssl / osslsigncode call in these tests (normally well
+    /// under a second). Without one, a stuck child waits forever and the CI job
+    /// hangs with no failing test named — which is how the 2026-10-27 release
+    /// run wedged. With one, it fails as a TimeoutException naming the tool.
+    /// </summary>
+    public static readonly TimeSpan ToolTimeout = TimeSpan.FromSeconds(60);
+
     /// <summary>Common Homebrew bin directories: Apple-silicon first, then Intel.</summary>
     private static readonly string[] BinDirs = ["/opt/homebrew/bin", "/usr/local/bin"];
 
@@ -43,12 +51,12 @@ internal static class SigningTestEnv
     {
         try
         {
-            var (exit, _, _) = await ProcessRunner.RunAsync("openssl", ["version"]);
+            var (exit, _, _) = await ProcessRunner.RunAsync("openssl", ["version"], default, ToolTimeout);
             return exit == 0;
         }
-        catch
+        catch (System.ComponentModel.Win32Exception)
         {
-            return false;
+            return false;   // not installed. A timeout is NOT caught: a hang must fail, not skip.
         }
     }
 
@@ -61,11 +69,13 @@ internal static class SigningTestEnv
 
         var (rc1, _, e1) = await ProcessRunner.RunAsync("openssl",
             ["req", "-x509", "-newkey", "rsa:2048", "-keyout", keyPem, "-out", certPem,
-             "-days", "2", "-nodes", "-subj", "/CN=WrapTune Signing Test"]);
+             "-days", "2", "-nodes", "-subj", "/CN=WrapTune Signing Test"],
+            default, ToolTimeout);
         Assert.True(rc1 == 0, "openssl req failed: " + e1);
 
         var (rc2, _, e2) = await ProcessRunner.RunAsync("openssl",
-            ["pkcs12", "-export", "-out", pfx, "-inkey", keyPem, "-in", certPem, "-passout", "pass:" + Password]);
+            ["pkcs12", "-export", "-out", pfx, "-inkey", keyPem, "-in", certPem, "-passout", "pass:" + Password],
+            default, ToolTimeout);
         Assert.True(rc2 == 0, "openssl pkcs12 failed: " + e2);
 
         return pfx;

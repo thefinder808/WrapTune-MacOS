@@ -43,7 +43,7 @@ public sealed class PayloadSignerEndToEndTests
             Assert.True(result.Success, result.Error);
 
             // The independent verifier must now find a signature on the file.
-            var (_, vOut, vErr) = await ProcessRunner.RunAsync(ossl, ["verify", "-in", script]);
+            var (_, vOut, vErr) = await ProcessRunner.RunAsync(ossl, ["verify", "-in", script], default, SigningTestEnv.ToolTimeout);
             Assert.DoesNotContain("No signature found", vOut + "\n" + vErr, StringComparison.OrdinalIgnoreCase);
 
             // Re-running must SKIP the now-signed file (don't clobber an existing
@@ -98,7 +98,7 @@ public sealed class PayloadSignerEndToEndTests
             // The independent verifier must find a signature on every format.
             foreach (var file in new[] { script, pe, msi })
             {
-                var (_, vOut, vErr) = await ProcessRunner.RunAsync(ossl, ["verify", "-in", file]);
+                var (_, vOut, vErr) = await ProcessRunner.RunAsync(ossl, ["verify", "-in", file], default, SigningTestEnv.ToolTimeout);
                 Assert.DoesNotContain("No signature found", vOut + "\n" + vErr, StringComparison.OrdinalIgnoreCase);
             }
         }
