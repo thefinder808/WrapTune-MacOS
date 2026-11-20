@@ -86,6 +86,23 @@
         <Style Selector="Border.fieldRow.filled">
             <Setter Property="Height" Value="38"/>
         </Style>
+        <!-- The row a drag is about to land on. -->
+        <Style Selector="Border.fieldRow.dropTarget">
+            <Setter Property="Background" Value="{DynamicResource AccentSoft}"/>
+        </Style>
+
+        <!-- ── drop zone (empty state) ── -->
+        <Style Selector="Panel.dropZone > Rectangle">
+            <Setter Property="Stroke" Value="{DynamicResource ChipBorder}"/>
+            <Setter Property="StrokeThickness" Value="1.5"/>
+            <Setter Property="StrokeDashArray" Value="4,4"/>
+            <Setter Property="RadiusX" Value="12"/>
+            <Setter Property="RadiusY" Value="12"/>
+        </Style>
+        <Style Selector="Panel.dropZone.dropTarget > Rectangle">
+            <Setter Property="Stroke" Value="{DynamicResource Accent}"/>
+            <Setter Property="Fill" Value="{DynamicResource AccentSoft}"/>
+        </Style>
 
         <!-- ── step badges (numbered circles) ── -->
         <Style Selector="Border.badge">
@@ -409,7 +426,8 @@
                                                  DragDrop.AllowDrop="True"/>
                                         <TextBlock x:Name="TxtSetupDisplay" AutomationProperties.AccessibilityView="Raw" Grid.Column="1" Classes="pathDisplay"
                                                    Margin="12,0"/>
-                                        <Button x:Name="BtnBrowseSetup" AutomationProperties.Name="Browse for the setup file" Grid.Column="2" Classes="browse"
+                                        <Button x:Name="BtnBrowseSetup" AutomationProperties.Name="Choose the setup file" Grid.Column="2" Classes="browse"
+                                                Content="choose"
                                                 Click="BtnBrowseSetup_Click"/>
                                     </Grid>
                                 </Border>
@@ -559,6 +577,18 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Empty state: a visible place to drop. (The whole window
+                             accepts drops; this just says so where the eye lands.) -->
+                        <Panel x:Name="DropZone" Classes="dropZone" Height="104" Margin="0,16,0,0">
+                            <Rectangle/>
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="5">
+                                <TextBlock Text="Drop a folder here to package it" FontSize="13.5"
+                                           Foreground="{DynamicResource Dim}" HorizontalAlignment="Center"/>
+                                <TextBlock Classes="monoHint" HorizontalAlignment="Center"
+                                           Text="or drop a .intunewin to inspect it"/>
+                            </StackPanel>
+                        </Panel>
+
                     </StackPanel>
 
                     <!-- ═══ Packaging state ═══ -->
@@ -572,7 +602,7 @@
                         </StackPanel>
 
                         <!-- context strip -->
-                        <Border Classes="card" CornerRadius="10" Height="40" Margin="0,16,0,0" Padding="14,0">
+                        <Border x:Name="BreadcrumbCard" Classes="card" CornerRadius="10" Height="40" Margin="0,16,0,0" Padding="14,0">
                             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                                 <TextBlock x:Name="TxtBreadcrumb" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
                                            Foreground="{DynamicResource Fg}" TextTrimming="CharacterEllipsis"
@@ -584,6 +614,7 @@
                         </Border>
 
                         <!-- progress hero -->
+                        <StackPanel x:Name="RunHero">
                         <Grid ColumnDefinitions="*,Auto" Margin="0,28,0,0">
                             <TextBlock x:Name="TxtPercent" Text="0%" FontSize="42" FontWeight="SemiBold"
                                        Foreground="{DynamicResource Fg}" LetterSpacing="-0.84"/>
@@ -598,6 +629,63 @@
                         <ProgressBar x:Name="BarRun" AutomationProperties.Name="Packaging progress" Margin="0,14,0,0" Height="6" MinHeight="6"
                                      CornerRadius="3" Minimum="0" Maximum="1"
                                      Foreground="{DynamicResource Accent}" Background="{DynamicResource Panel2Bg}"/>
+                        </StackPanel>
+
+                        <!-- Done: the receipt replaces the strip and the hero. It answers
+                             "what did I get, and where" and hands the file over — reveal
+                             it, copy its path, or drag it straight into the Intune upload
+                             page in the browser. -->
+                        <Border x:Name="ReceiptCard" Classes="card" Margin="0,16,0,0" IsVisible="False">
+                            <StackPanel>
+                                <Border x:Name="ReceiptFile" Padding="16,14" Background="Transparent" Cursor="Hand"
+                                        ToolTip.Tip="Drag this into the Intune admin center's upload box"
+                                        PointerPressed="ReceiptFile_PointerPressed"
+                                        PointerMoved="ReceiptFile_PointerMoved"
+                                        PointerReleased="ReceiptFile_PointerReleased">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Border Classes="badge done" Width="30" Height="30" CornerRadius="15"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text="✓" FontSize="14"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="14,0,12,0" VerticalAlignment="Center">
+                                            <TextBlock x:Name="TxtReceiptName" FontFamily="{StaticResource MonoFont}"
+                                                       FontSize="14" FontWeight="Medium"
+                                                       Foreground="{DynamicResource Fg}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock x:Name="TxtReceiptSummary" Classes="monoHint" Margin="0,4,0,0"
+                                                       HorizontalAlignment="Left"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="2" Classes="chip">
+                                            <TextBlock Text="drag out ↗"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                                <Border Classes="fieldRow filled">
+                                    <Grid ColumnDefinitions="140,*,Auto" VerticalAlignment="Center">
+                                        <TextBlock Classes="fieldLabel" Text="Saved to"/>
+                                        <TextBlock x:Name="TxtReceiptLocation" Grid.Column="1" Classes="pathDisplay"
+                                                   IsVisible="True" Margin="12,0"/>
+                                        <Button x:Name="BtnCopyPath" Grid.Column="2" Classes="browse" Content="copy path"
+                                                AutomationProperties.Name="Copy the package's path"
+                                                Click="BtnCopyPath_Click"/>
+                                    </Grid>
+                                </Border>
+                                <Border Classes="fieldRow filled">
+                                    <Grid ColumnDefinitions="140,*" VerticalAlignment="Center">
+                                        <TextBlock Classes="fieldLabel" Text="Setup file"/>
+                                        <TextBlock x:Name="TxtReceiptSetup" Grid.Column="1" Classes="pathDisplay"
+                                                   IsVisible="True" Margin="12,0,0,0"/>
+                                    </Grid>
+                                </Border>
+                                <Border x:Name="RowReceiptMsi" Classes="fieldRow filled">
+                                    <Grid ColumnDefinitions="140,*" VerticalAlignment="Center">
+                                        <TextBlock Classes="fieldLabel" Text="MSI"/>
+                                        <TextBlock x:Name="TxtReceiptMsi" Grid.Column="1" Classes="pathDisplay"
+                                                   IsVisible="True" Margin="12,0,0,0"/>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </Border>
 
                         <!-- stage list / raw log (same slot) -->
                         <Border x:Name="StageCard" Classes="card" Margin="0,18,0,0" Padding="0,6">

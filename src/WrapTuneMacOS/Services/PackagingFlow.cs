@@ -120,6 +120,78 @@ public static class PackagingFlow
         }
     }
 
+    /// <summary>The installers found under a source folder, as paths relative to
+    /// it, plus how many more there were beyond the cap.</summary>
+    public sealed record InstallerList(IReadOnlyList<string> RelativePaths, int Omitted);
+
+    /// <summary>
+    /// The setup file a source folder most likely wants, or null when it's
+    /// genuinely ambiguous. A PSADT launcher wins outright — those folders always
+    /// hold the .exe and its .ps1 side by side, plus helpers. Otherwise it's the
+    /// folder's only installer, if it has exactly one. Top level only: a setup
+    /// file buried in a subfolder is never the obvious choice.
+    /// </summary>
+    public static string? GuessSetupFile(string? folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return null;
+
+        var installers = Directory.GetFiles(folder)
+            .Where(f => InstallerExtensions.IsInstaller(f) && !IntuneWinWriter.IsMacMetadataFile(f))
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var launcher in SharedSetupNames)
+        {
+            var hit = installers.FirstOrDefault(f =>
+                Path.GetFileName(f).Equals(launcher + ".exe", StringComparison.OrdinalIgnoreCase));
+            if (hit is not null) return hit;
+        }
+        return installers.Length == 1 ? installers[0] : null;
+    }
+
+    /// <summary>Every installer under <paramref name="folder"/>, nearest the top
+    /// first, for the setup-file picker. Capped — a folder with hundreds of
+    /// .exe files needs the file dialog, not a menu.</summary>
+    public static InstallerList FindInstallers(string? folder, int max = 15)
+    {
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+            return new InstallerList([], 0);
+        try
+        {
+            var root = Path.GetFullPath(folder);
+            var all = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                .Where(f => InstallerExtensions.IsInstaller(f) && !IntuneWinWriter.IsMacMetadataFile(f))
+                .Select(f => Path.GetRelativePath(root, f))
+                .OrderBy(r => r.Count(ch => ch == Path.DirectorySeparatorChar))
+                .ThenBy(r => r, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            return new InstallerList(all.Take(max).ToList(), Math.Max(0, all.Count - max));
+        }
+        catch
+        {
+            return new InstallerList([], 0);   // unreadable folder — fall back to the file dialog
+        }
+    }
+
+    /// <summary>Footer text while something is dragged over the window: says
+    /// what letting go will do, before it's done.</summary>
+    public static string DropHint(DropKind kind) => kind switch
+    {
+        DropKind.SourceFolder => "drop to use as the source folder",
+        DropKind.OutputFolder => "drop to use as the output folder",
+        DropKind.SetupFile => "drop to use as the setup file",
+        DropKind.InspectPackage => "drop to inspect this package",
+        _ => "",
+    };
+
+    /// <summary>The line under the file name on the done screen:
+    /// "39.9 MB · built in 00:04 · signed · pfx".</summary>
+    public static string ReceiptSummary(long packageBytes, TimeSpan elapsed, string? signedChip)
+    {
+        var summary = $"{FormatSize(packageBytes)} · built in {FormatElapsed(elapsed)}";
+        return string.IsNullOrWhiteSpace(signedChip) ? summary : $"{summary} · {signedChip}";
+    }
+
     /// <summary>A path as the form shows it: the home folder shortened to "~".
     /// <paramref name="home"/> is a parameter so this stays testable.</summary>
     public static string AbbreviateHome(string? path, string? home)

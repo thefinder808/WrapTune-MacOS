@@ -50,6 +50,10 @@ nowhere in the chain.
   click away.
 - **Whole-window drag-and-drop** — drop a folder anywhere to set the source,
   drop an installer to set the setup file, drop a `.intunewin` to inspect it.
+  The row a drag would fill lights up, and the footer says what letting go will do.
+- **A receipt when it's done** — the package's name, size and location, with
+  **Reveal in Finder** and **copy path**. Drag the file straight from the receipt
+  into the Intune admin center's upload box.
 - **Optional Authenticode code-signing** of the payload before wrapping — sign
   your `.exe`/`.msi`/`.ps1` from the Mac with a local cert (PFX or PKCS#11/HSM) or
   **Azure Artifact Signing** — formerly Trusted Signing. Signing runs in-process;
@@ -82,6 +86,9 @@ build is notarized, Gatekeeper accepts it without the right-click-Open workaroun
 
 1. **Source folder** — the folder containing your installer and any supporting files.
 2. **Setup file** — the installer within that folder (`.exe`, `.msi`, `.ps1`, …).
+   It's picked for you when the choice is obvious: the folder's only installer,
+   or the PSADT launcher if there is one. **choose** lists every installer in the
+   folder, with **Browse…** for anything else.
 3. **Output folder** — where the `.intunewin` is written.
 4. **Output name** — pre-filled with the setup file's name, as the official tool
    names it. For a PSADT package it's pre-filled with the source folder's name

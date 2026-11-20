@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
@@ -39,6 +40,10 @@ public partial class MainWindow : Window
     private int? _encryptPercent;
     private int? _zipPercent;
     private string? _lastOutputPath;   // the package the last successful run produced
+    private IStorageFile? _lastOutputFile;   // …resolved up front: a drag-out must start synchronously
+    private Point? _receiptPress;      // where a press on the receipt began (drag threshold)
+    private bool _draggingOut;         // our own drag is in flight — don't treat it as a drop on us
+    private DropKind? _dropTarget;     // what the drag currently over the window would do
     private string? _sizeHint;         // "est. 39.8 MB" once the source folder has been walked
     private bool _themeChosen;         // false = follow the macOS appearance
     private readonly System.Diagnostics.Stopwatch _elapsed = new();
@@ -182,7 +187,60 @@ public partial class MainWindow : Window
             TxtOutputFolder.Text = folder;
     }
 
+    /// <summary>The setup file has to live inside the source folder, so offer
+    /// the installers that are actually in it. The file dialog is still there
+    /// ("Browse…") and is what opens when there's no source folder to list.</summary>
     private async void BtnBrowseSetup_Click(object? sender, RoutedEventArgs e)
+    {
+        var source = TxtSourceFolder.Text?.Trim();
+        var found = await Task.Run(() => PackagingFlow.FindInstallers(source));
+        if (found.RelativePaths.Count == 0)
+        {
+            await BrowseSetupFileAsync();
+            return;
+        }
+        BuildSetupMenu(source!, found).ShowAt(BtnBrowseSetup);
+    }
+
+    internal MenuFlyout BuildSetupMenu(string source, PackagingFlow.InstallerList found)
+    {
+        var mono = (FontFamily)this.FindResource("MonoFont")!;
+        var current = TxtSetupFile.Text?.Trim() ?? "";
+        var menu = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
+
+        foreach (var relative in found.RelativePaths)
+        {
+            var full = Path.Combine(source, relative);
+            var item = new MenuItem
+            {
+                // A TextBlock, not a string: a string header treats "_" as an
+                // access-key marker and would eat underscores in file names.
+                Header = new TextBlock { Text = relative, FontFamily = mono, FontSize = 12 },
+                Icon = string.Equals(full, current, StringComparison.OrdinalIgnoreCase)
+                    ? new TextBlock { Text = "✓", FontSize = 12 }
+                    : null,
+            };
+            AutomationProperties.SetName(item, relative);
+            item.Click += (_, _) => TxtSetupFile.Text = full;
+            menu.Items.Add(item);
+        }
+
+        if (found.Omitted > 0)
+            menu.Items.Add(new MenuItem
+            {
+                Header = new TextBlock { Text = $"{found.Omitted} more — use Browse…", FontSize = 12 },
+                IsEnabled = false,
+            });
+
+        menu.Items.Add(new Separator());
+        var browse = new MenuItem { Header = new TextBlock { Text = "Browse…", FontSize = 12.5 } };
+        AutomationProperties.SetName(browse, "Browse for another file");
+        browse.Click += async (_, _) => await BrowseSetupFileAsync();
+        menu.Items.Add(browse);
+        return menu;
+    }
+
+    private async Task BrowseSetupFileAsync()
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
@@ -232,8 +290,7 @@ public partial class MainWindow : Window
     private void AutoPopulateSetupFile(string folder)
     {
         if (!Directory.Exists(folder)) return;
-        var installers = Directory.GetFiles(folder).Where(InstallerExtensions.IsInstaller).ToArray();
-        TxtSetupFile.Text = installers.Length == 1 ? installers[0] : string.Empty;
+        TxtSetupFile.Text = PackagingFlow.GuessSetupFile(folder) ?? string.Empty;
     }
 
     // ── Signing UI ────────────────────────────────────────────────────────--
@@ -519,6 +576,7 @@ public partial class MainWindow : Window
         RowOutput.Classes.Set("filled", !string.IsNullOrWhiteSpace(TxtOutputFolder.Text));
         RowOutputName.Classes.Set("filled", !string.IsNullOrWhiteSpace(TxtOutputName.Text));
         RowOverwrite.Classes.Set("filled", ready);   // rows compress together once filled
+        DropZone.IsVisible = string.IsNullOrWhiteSpace(TxtSourceFolder.Text);
 
         // Step 2: preview at 55% until the switch is on; indigo border while expanded.
         Card2.Classes.Set("preview", !signingOn);
@@ -737,6 +795,9 @@ public partial class MainWindow : Window
         BuildStageRows(signing, isMsi);
 
         TxtRunTitle.Text = "Packaging";
+        BreadcrumbCard.IsVisible = true;
+        RunHero.IsVisible = true;
+        ReceiptCard.IsVisible = false;
         TxtPercent.Foreground = B("Fg");
         TxtBreadcrumb.Text =
             $"{Path.GetFileName(Path.TrimEndingDirectorySeparator(source))}/ → {Path.GetFileName(setup)} → {Abbreviate(output)}";
@@ -864,6 +925,7 @@ public partial class MainWindow : Window
         _lastOutputPath = outputPath;
         TxtBreadcrumb.Text =
             $"{Path.GetFileName(outputPath)}  ·  in {Abbreviate(Path.GetDirectoryName(outputPath) ?? "")}";
+        ShowReceipt(outputPath);
 
         _running = false;
         StopRunTimers();
@@ -875,6 +937,92 @@ public partial class MainWindow : Window
         BtnPackage.IsVisible = false;
         AppendOutput("Package created successfully!");
         SetStatus($"done — {Path.GetFileName(outputPath)} created", "Success");
+    }
+
+    /// <summary>Swaps the strip and progress hero for the receipt card.</summary>
+    private void ShowReceipt(string outputPath)
+    {
+        long size = 0;
+        try { size = new FileInfo(outputPath).Length; } catch { /* shown as 0 B rather than failing a finished run */ }
+
+        TxtReceiptName.Text = Path.GetFileName(outputPath);
+        TxtReceiptSummary.Text = PackagingFlow.ReceiptSummary(
+            size, _elapsed.Elapsed, ChipSigned.IsVisible ? TxtChipSigned.Text : null);
+        TxtReceiptLocation.Text = Abbreviate(Path.GetDirectoryName(outputPath) ?? "");
+        TxtReceiptSetup.Text = TxtSetupDisplay.Text;
+        RowReceiptMsi.IsVisible = RowMsi.IsVisible;
+        TxtReceiptMsi.Text = TxtMsiReadout.Text;
+        ToolTip.SetTip(TxtReceiptLocation, outputPath);
+
+        BreadcrumbCard.IsVisible = false;
+        RunHero.IsVisible = false;
+        ReceiptCard.IsVisible = true;
+
+        // Resolve the file now. A drag has to begin inside the pointer event
+        // that triggers it; awaiting a lookup there would be too late.
+        _lastOutputFile = null;
+        _ = ResolveOutputFileAsync(outputPath);
+    }
+
+    private async Task ResolveOutputFileAsync(string outputPath)
+    {
+        try
+        {
+            var file = await StorageProvider.TryGetFileFromPathAsync(outputPath);
+            if (_lastOutputPath == outputPath) _lastOutputFile = file;
+        }
+        catch
+        {
+            // No drag-out for this package; Reveal and Copy path still work.
+        }
+    }
+
+    private async void BtnCopyPath_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_lastOutputPath is null || Clipboard is not { } clipboard) return;
+        try
+        {
+            await clipboard.SetTextAsync(_lastOutputPath);
+            SetStatus("path copied", "Success");
+        }
+        catch
+        {
+            SetStatus("couldn't reach the clipboard", "Error");
+        }
+    }
+
+    // Dragging the receipt's file row drags the package itself, so it can be
+    // dropped on the Intune admin center's upload box (or anywhere else).
+    private void ReceiptFile_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            _receiptPress = e.GetPosition(this);
+    }
+
+    private void ReceiptFile_PointerReleased(object? sender, PointerReleasedEventArgs e) => _receiptPress = null;
+
+    private async void ReceiptFile_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_receiptPress is not { } start || _lastOutputFile is not { } file) return;
+        var now = e.GetPosition(this);
+        if (Math.Abs(now.X - start.X) < 4 && Math.Abs(now.Y - start.Y) < 4) return;   // a click, not a drag
+
+        _receiptPress = null;
+        _draggingOut = true;
+        try
+        {
+            var data = new DataTransfer();
+            data.Add(DataTransferItem.CreateFile(file));
+            await DragDrop.DoDragDropAsync(e, data, DragDropEffects.Copy);
+        }
+        catch
+        {
+            // A refused drag isn't worth an error; the file is where the receipt says.
+        }
+        finally
+        {
+            _draggingOut = false;
+        }
     }
 
     private void FailRun(PackageStage stage, string message)
@@ -1082,18 +1230,43 @@ public partial class MainWindow : Window
     private void WireDragDrop()
     {
         AddHandler(DragDrop.DragOverEvent, OnWindowDragOver);
+        AddHandler(DragDrop.DragLeaveEvent, (_, _) => ShowDropTarget(null));
         AddHandler(DragDrop.DropEvent, OnWindowDrop);
     }
 
     private void OnWindowDragOver(object? sender, DragEventArgs e)
     {
-        e.DragEffects = GetDropPath(e) is not null ? DragDropEffects.Link : DragDropEffects.None;
+        var path = _draggingOut ? null : GetDropPath(e);
+        e.DragEffects = path is not null ? DragDropEffects.Link : DragDropEffects.None;
+        ShowDropTarget(path is null
+            ? null
+            : PackagingFlow.ClassifyDrop(path, Directory.Exists(path), IsWithin(e, RowOutput)));
         e.Handled = true;
+    }
+
+    /// <summary>Shows where a drag would land before it's dropped: the row it
+    /// would fill lights up and the footer says what letting go will do. Null
+    /// clears it. Mid-run only "inspect" is possible, so nothing else is offered.</summary>
+    internal void ShowDropTarget(DropKind? kind)
+    {
+        if (_running && kind != DropKind.InspectPackage) kind = null;
+        if (kind == _dropTarget) return;
+        _dropTarget = kind;
+
+        RowSource.Classes.Set("dropTarget", kind == DropKind.SourceFolder);
+        RowSetup.Classes.Set("dropTarget", kind == DropKind.SetupFile);
+        RowOutput.Classes.Set("dropTarget", kind == DropKind.OutputFolder);
+        DropZone.Classes.Set("dropTarget", kind is DropKind.SourceFolder or DropKind.InspectPackage);
+
+        if (_running) return;   // the footer belongs to the run
+        if (kind is { } k) SetStatus(PackagingFlow.DropHint(k), "AccentLink");
+        else UpdateFlowUi();    // put the normal status back
     }
 
     private void OnWindowDrop(object? sender, DragEventArgs e)
     {
-        if (GetDropPath(e) is not { } path) return;
+        ShowDropTarget(null);
+        if (_draggingOut || GetDropPath(e) is not { } path) return;
 
         switch (PackagingFlow.ClassifyDrop(path, Directory.Exists(path), IsWithin(e, RowOutput)))
         {

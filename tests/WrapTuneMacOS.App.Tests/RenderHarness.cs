@@ -3,6 +3,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using WrapTuneMacOS.Services;
 
 namespace WrapTuneMacOS.UiTests;
 
@@ -53,6 +54,14 @@ public sealed class RenderHarness
             w.Show();
             Pump(TimeSpan.FromMilliseconds(700));
             Capture(w, outDir, "state1-empty.png");
+
+            // A folder dragged over the empty form: the source row and the drop
+            // zone light up and the footer says what letting go will do.
+            w.ShowDropTarget(DropKind.SourceFolder);
+            Pump(TimeSpan.FromMilliseconds(200));
+            Capture(w, outDir, "state1-dragover.png");
+            w.ShowDropTarget(null);
+            Pump(TimeSpan.FromMilliseconds(100));
 
             // fill the form + signing (pfx mode) — mock state 2. The pfx must
             // exist or validation keeps the footer in its error state.
