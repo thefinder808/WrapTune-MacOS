@@ -142,6 +142,46 @@ public sealed class RenderHarness
             Capture(w, outDir, "state3-failed.png");
             w.Close();
 
+            // Batch queue: three folders, one of them needing a setup file chosen;
+            // then the results of a run where one item fails.
+            var apps = Path.Combine(sandbox, "Apps");
+            foreach (var (app, files) in new[]
+                     {
+                         ("Zoom 6.1", new[] { "Invoke-AppDeployToolkit.exe", "Invoke-AppDeployToolkit.ps1" }),
+                         ("Chrome 130", new[] { "Invoke-AppDeployToolkit.exe", "Invoke-AppDeployToolkit.ps1" }),
+                         ("7-Zip 24", new[] { "7z-x64.msi", "prereq.exe" }),
+                     })
+            {
+                Directory.CreateDirectory(Path.Combine(apps, app));
+                foreach (var f in files)
+                {
+                    var bytes = new byte[512 * 1024];
+                    Random.Shared.NextBytes(bytes);
+                    File.WriteAllBytes(Path.Combine(apps, app, f), bytes);
+                }
+            }
+            new AppSettings { Theme = "Midnight", ThemeChosen = true }.Save();
+            var q = new MainWindow();
+            q.Show();
+            q.AddToQueue(Directory.GetDirectories(apps).OrderByDescending(d => d));
+            q.FindControl<TextBox>("TxtOutputFolder")!.Text = outFolder;
+            Pump(TimeSpan.FromMilliseconds(500));
+            Capture(q, outDir, "queue-form.png");
+
+            var sevenZip = q.Queue.First(i => i.FolderName == "7-Zip 24");
+            q.SetQueueSetup(sevenZip, Path.Combine(sevenZip.Folder, "7z-x64.msi"));
+            File.WriteAllText(Path.Combine(outFolder, "Chrome 130.intunewin"), "already here");
+            q.FindControl<ToggleSwitch>("ChkOverwrite")!.IsChecked = false;
+            Pump(TimeSpan.FromMilliseconds(300));
+            q.FindControl<Button>("BtnPackage")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var queueDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+            while (DateTime.UtcNow < queueDeadline &&
+                   !q.FindControl<Border>("QueueResultCard")!.IsVisible)
+                Pump(TimeSpan.FromMilliseconds(100));
+            Pump(TimeSpan.FromMilliseconds(300));
+            Capture(q, outDir, "queue-done.png");
+            q.Close();
+
             // Daylight frames (derived palette — not part of the mocks).
             new AppSettings { Theme = "Daylight", ThemeChosen = true }.Save();
             var light = new MainWindow();
@@ -182,6 +222,13 @@ public sealed class RenderHarness
 
     private static void Capture(Window w, string dir, string name)
     {
+        // A state change needs a layout pass and then a composition pass before
+        // it is in the frame; one forced tick isn't always both.
+        for (int i = 0; i < 3; i++)
+        {
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+        }
         using var frame = w.CaptureRenderedFrame();
         frame?.Save(Path.Combine(dir, name));
     }

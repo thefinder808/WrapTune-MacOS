@@ -363,6 +363,19 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="12"/>
         </Style>
+
+        <!-- ── batch queue ──
+             Last on purpose: these recolor text that also carries the monoHint /
+             pathDisplay / badge classes, and a later style wins a tie. -->
+        <Style Selector="TextBlock.queueProblem">
+            <Setter Property="Foreground" Value="{DynamicResource Error}"/>
+        </Style>
+        <Style Selector="Border.badge.failed">
+            <Setter Property="BorderBrush" Value="{DynamicResource Error}"/>
+        </Style>
+        <Style Selector="Border.badge.failed > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Error}"/>
+        </Style>
     </Window.Styles>
 
     <Grid RowDefinitions="44,*">
@@ -401,10 +414,21 @@
                                     <Border x:Name="Step1Badge" Classes="badge">
                                         <TextBlock x:Name="Step1BadgeText" Text="1"/>
                                     </Border>
-                                    <TextBlock Grid.Column="1" Classes="stepTitle" Text="Files" Margin="10,0,0,0"/>
-                                    <TextBlock x:Name="TxtSourceSummary" Grid.Column="2" Classes="monoHint"
-                                               HorizontalAlignment="Right" Text="or drop a folder anywhere"/>
+                                    <TextBlock x:Name="TxtStep1Title" Grid.Column="1" Classes="stepTitle" Text="Files" Margin="10,0,0,0"/>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12"
+                                                HorizontalAlignment="Right">
+                                        <TextBlock x:Name="TxtSourceSummary" Classes="monoHint"
+                                                   Text="or drop a folder anywhere"/>
+                                        <Button x:Name="BtnClearQueue" Classes="link mono" Content="clear queue"
+                                                IsVisible="False" VerticalAlignment="Center"
+                                                Click="BtnClearQueue_Click"/>
+                                    </StackPanel>
                                 </Grid>
+
+                                <!-- Batch queue: one row per dropped folder, built in code.
+                                     While it shows, the three single-package rows below it
+                                     are hidden; output folder and overwrite apply to all. -->
+                                <StackPanel x:Name="QueueList" IsVisible="False"/>
 
                                 <Border x:Name="RowSource" Classes="fieldRow">
                                     <Grid ColumnDefinitions="140,*,Auto" VerticalAlignment="Center">
@@ -585,7 +609,7 @@
                                 <TextBlock Text="Drop a folder here to package it" FontSize="13.5"
                                            Foreground="{DynamicResource Dim}" HorizontalAlignment="Center"/>
                                 <TextBlock Classes="monoHint" HorizontalAlignment="Center"
-                                           Text="or drop a .intunewin to inspect it"/>
+                                           Text="several folders to queue them · a .intunewin to inspect it"/>
                             </StackPanel>
                         </Panel>
 
@@ -685,6 +709,12 @@
                                     </Grid>
                                 </Border>
                             </StackPanel>
+                        </Border>
+
+                        <!-- Batch done: one line per queued folder — what it became, or why not. -->
+                        <Border x:Name="QueueResultCard" Classes="card" Margin="0,16,0,0" Padding="0,6"
+                                IsVisible="False">
+                            <StackPanel x:Name="QueueResultList"/>
                         </Border>
 
                         <!-- stage list / raw log (same slot) -->

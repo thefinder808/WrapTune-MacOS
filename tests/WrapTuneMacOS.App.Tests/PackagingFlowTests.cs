@@ -170,7 +170,34 @@ public sealed class PackagingFlowTests
         Assert.Empty(PackagingFlow.FindInstallers(Path.Combine(Path.GetTempPath(), "wraptune-nope")).RelativePaths);
     }
 
+    [Fact]
+    public void Several_dropped_items_are_a_batch_only_when_all_are_folders()
+    {
+        (string, bool) Dir(string p) => (p, true);
+        (string, bool) File(string p) => (p, false);
+
+        // Several at once.
+        Assert.Equal(DropKind.Queue, PackagingFlow.ClassifyDrops([Dir("/a"), Dir("/b")], false, false));
+        Assert.Equal(DropKind.Queue, PackagingFlow.ClassifyDrops([Dir("/a"), Dir("/b")], true, false));
+        Assert.Null(PackagingFlow.ClassifyDrops([Dir("/a"), File("/b.msi")], false, false));
+        Assert.Null(PackagingFlow.ClassifyDrops([File("/a.intunewin"), File("/b.intunewin")], false, false));
+        Assert.Null(PackagingFlow.ClassifyDrops([], false, false));
+
+        // One item, no queue showing: routed exactly as before.
+        Assert.Equal(DropKind.SourceFolder, PackagingFlow.ClassifyDrops([Dir("/a")], false, false));
+        Assert.Equal(DropKind.OutputFolder, PackagingFlow.ClassifyDrops([Dir("/a")], true, false));
+        Assert.Equal(DropKind.SetupFile, PackagingFlow.ClassifyDrops([File("/a/setup.msi")], false, false));
+        Assert.Equal(DropKind.InspectPackage, PackagingFlow.ClassifyDrops([File("/a.intunewin")], false, false));
+
+        // One item while a queue is showing: a folder joins it; a loose installer has nowhere to go.
+        Assert.Equal(DropKind.Queue, PackagingFlow.ClassifyDrops([Dir("/a")], false, true));
+        Assert.Equal(DropKind.OutputFolder, PackagingFlow.ClassifyDrops([Dir("/a")], true, true));
+        Assert.Null(PackagingFlow.ClassifyDrops([File("/a/setup.msi")], false, true));
+        Assert.Equal(DropKind.InspectPackage, PackagingFlow.ClassifyDrops([File("/a.intunewin")], false, true));
+    }
+
     [Theory]
+    [InlineData(DropKind.Queue, "drop to queue these folders")]
     [InlineData(DropKind.SourceFolder, "drop to use as the source folder")]
     [InlineData(DropKind.OutputFolder, "drop to use as the output folder")]
     [InlineData(DropKind.SetupFile, "drop to use as the setup file")]

@@ -11,6 +11,10 @@ public enum DropKind
     OutputFolder,
     SetupFile,
     InspectPackage,
+
+    /// <summary>Several folders at once (or one more while a queue is showing):
+    /// each becomes a package in the batch queue.</summary>
+    Queue,
 }
 
 /// <summary>Stages shown in the packaging progress view, in execution order.
@@ -173,6 +177,28 @@ public static class PackagingFlow
         }
     }
 
+    /// <summary>
+    /// Routing for everything a drag carries. One item routes as before
+    /// (<see cref="ClassifyDrop"/>), except that while a queue is showing a
+    /// folder joins it and a loose installer has nowhere to go. Several items
+    /// are a batch only if every one is a folder. Null = not droppable.
+    /// </summary>
+    public static DropKind? ClassifyDrops(
+        IReadOnlyList<(string Path, bool IsDirectory)> items, bool overOutputRow, bool queueShowing)
+    {
+        if (items.Count == 0) return null;
+        if (items.Count > 1) return items.All(i => i.IsDirectory) ? DropKind.Queue : null;
+
+        var kind = ClassifyDrop(items[0].Path, items[0].IsDirectory, overOutputRow);
+        if (!queueShowing) return kind;
+        return kind switch
+        {
+            DropKind.SourceFolder => DropKind.Queue,
+            DropKind.SetupFile => null,
+            _ => kind,
+        };
+    }
+
     /// <summary>Footer text while something is dragged over the window: says
     /// what letting go will do, before it's done.</summary>
     public static string DropHint(DropKind kind) => kind switch
@@ -181,6 +207,7 @@ public static class PackagingFlow
         DropKind.OutputFolder => "drop to use as the output folder",
         DropKind.SetupFile => "drop to use as the setup file",
         DropKind.InspectPackage => "drop to inspect this package",
+        DropKind.Queue => "drop to queue these folders",
         _ => "",
     };
 

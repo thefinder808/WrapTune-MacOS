@@ -44,6 +44,12 @@ public partial class MainWindow : Window
     private Point? _receiptPress;      // where a press on the receipt began (drag threshold)
     private bool _draggingOut;         // our own drag is in flight — don't treat it as a drop on us
     private DropKind? _dropTarget;     // what the drag currently over the window would do
+
+    // ── batch queue (not persisted) ──
+    private readonly List<QueueItem> _queue = [];
+    private bool _queueDone;           // the run view is showing a finished batch's results
+    private bool InQueue => _queue.Count > 0;
+    internal IReadOnlyList<QueueItem> Queue => _queue;
     private string? _sizeHint;         // "est. 39.8 MB" once the source folder has been walked
     private bool _themeChosen;         // false = follow the macOS appearance
     private readonly System.Diagnostics.Stopwatch _elapsed = new();
@@ -177,8 +183,153 @@ public partial class MainWindow : Window
 
     private async void BtnBrowseSource_Click(object? sender, RoutedEventArgs e)
     {
-        if (await PickFolderAsync("Select the source folder containing your setup files", TxtSourceFolder.Text) is { } folder)
-            ApplySourceFolder(folder);
+        var picked = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Select the source folder — or several, to queue them",
+            AllowMultiple = true,
+            SuggestedStartLocation = await StartLocationAsync(TxtSourceFolder.Text),
+        });
+        var folders = picked.Select(f => f.Path.LocalPath).ToList();
+        if (folders.Count > 1 || (folders.Count == 1 && InQueue)) AddToQueue(folders);
+        else if (folders.Count == 1) ApplySourceFolder(folders[0]);
+    }
+
+    // ── Batch queue ─────────────────────────────────────────────────────────
+
+    /// <summary>Queues <paramref name="folders"/>. A single folder with no
+    /// queue showing is just the ordinary source folder.</summary>
+    internal void AddToQueue(IEnumerable<string> folders)
+    {
+        var added = BatchQueue.Plan(folders, _queue);
+        if (added.Count == 0) return;
+        if (!InQueue && added.Count == 1)
+        {
+            ApplySourceFolder(added[0].Folder);
+            return;
+        }
+
+        _queue.AddRange(added);
+        if (string.IsNullOrWhiteSpace(TxtOutputFolder.Text) &&
+            PackagingFlow.DefaultOutputFolder(_queue[0].Folder) is { } parent)
+            TxtOutputFolder.Text = parent;
+        RenderQueue();
+    }
+
+    private void BtnClearQueue_Click(object? sender, RoutedEventArgs e)
+    {
+        _queue.Clear();
+        RenderQueue();
+    }
+
+    /// <summary>Rebuilds the queue rows and swaps the step-1 card between its
+    /// single-package rows and the queue.</summary>
+    private void RenderQueue()
+    {
+        var queued = InQueue;
+        QueueList.IsVisible = queued;
+        BtnClearQueue.IsVisible = queued;
+        TxtStep1Title.Text = queued ? "Queue" : "Files";
+        RowSource.IsVisible = !queued;
+        RowSetup.IsVisible = !queued;
+        RowOutputName.IsVisible = !queued;
+
+        QueueList.Children.Clear();
+        foreach (var item in _queue)
+            QueueList.Children.Add(BuildQueueRow(item));
+
+        if (queued)
+        {
+            TxtSourceSummary.Text = BatchQueue.Summary(_queue.Count);
+            RowMsi.IsVisible = false;
+            _sizeHint = null;
+            UpdateFlowUi();
+        }
+        else
+        {
+            OnPathsChanged();   // back to one package: recompute its summary
+        }
+    }
+
+    private Border BuildQueueRow(QueueItem item)
+    {
+        var problem = BatchQueue.Problem(item);
+
+        var name = new TextBlock { Text = item.FolderName, TextTrimming = TextTrimming.CharacterEllipsis };
+        name.Classes.Add("fieldLabel");
+
+        var setup = new TextBlock
+        {
+            Text = problem ?? PackagingFlow.SetupDisplay(item.Folder, item.SetupFile, null),
+            IsVisible = true,
+            Margin = new Thickness(12, 0),
+        };
+        setup.Classes.Add("pathDisplay");
+        if (problem is not null) setup.Classes.Add("queueProblem");
+
+        var choose = new Button { Content = "choose" };
+        choose.Classes.Add("browse");
+        AutomationProperties.SetName(choose, $"Choose the setup file for {item.FolderName}");
+        choose.Click += async (_, _) => await ChooseQueueSetupAsync(item, choose);
+
+        var remove = new Button { Content = "×", Margin = new Thickness(10, 0, 0, 0), FontSize = 15 };
+        remove.Classes.Add("link");
+        remove.Classes.Add("mono");
+        AutomationProperties.SetName(remove, $"Remove {item.FolderName} from the queue");
+        remove.Click += (_, _) =>
+        {
+            _queue.Remove(item);
+            RenderQueue();
+        };
+
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("170,*,Auto,Auto"),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        Grid.SetColumn(setup, 1);
+        Grid.SetColumn(choose, 2);
+        Grid.SetColumn(remove, 3);
+        grid.Children.Add(name);
+        grid.Children.Add(setup);
+        grid.Children.Add(choose);
+        grid.Children.Add(remove);
+
+        var row = new Border { Child = grid };
+        row.Classes.Add("fieldRow");
+        row.Classes.Add("filled");
+        ToolTip.SetTip(row, $"{item.Folder}\n→ {item.OutputName}.intunewin");
+        return row;
+    }
+
+    /// <summary>Sets a queued folder's setup file and refreshes its row.</summary>
+    internal void SetQueueSetup(QueueItem item, string path)
+    {
+        item.SetupFile = path;
+        RenderQueue();
+    }
+
+    private async Task ChooseQueueSetupAsync(QueueItem item, Control anchor)
+    {
+        void Pick(string path) => SetQueueSetup(item, path);
+
+        async Task BrowseAsync()
+        {
+            if (await PickSetupFileAsync(item.Folder) is { } path) Pick(path);
+        }
+
+        var found = await Task.Run(() => PackagingFlow.FindInstallers(item.Folder));
+        if (found.RelativePaths.Count == 0) await BrowseAsync();
+        else BuildSetupMenu(item.Folder, found, item.SetupFile, Pick, BrowseAsync).ShowAt(anchor);
+    }
+
+    private string? ValidateQueueInputs()
+    {
+        foreach (var item in _queue)
+            if (BatchQueue.Problem(item) is { } problem)
+                return $"{item.FolderName}: {problem}";
+        if (string.IsNullOrWhiteSpace(TxtOutputFolder.Text))
+            return "Output folder is not specified.";
+        return ValidateSigningInputs();
     }
 
     private async void BtnBrowseOutput_Click(object? sender, RoutedEventArgs e)
@@ -202,10 +353,17 @@ public partial class MainWindow : Window
         BuildSetupMenu(source!, found).ShowAt(BtnBrowseSetup);
     }
 
-    internal MenuFlyout BuildSetupMenu(string source, PackagingFlow.InstallerList found)
+    /// <summary>The picker for the single-package form's setup file.</summary>
+    internal MenuFlyout BuildSetupMenu(string source, PackagingFlow.InstallerList found) =>
+        BuildSetupMenu(source, found, TxtSetupFile.Text, path => TxtSetupFile.Text = path, BrowseSetupFileAsync);
+
+    /// <summary>The installers in <paramref name="source"/> as a menu; the same
+    /// menu serves the form's setup row and each queue row.</summary>
+    internal MenuFlyout BuildSetupMenu(string source, PackagingFlow.InstallerList found,
+        string? currentChoice, Action<string> pick, Func<Task> browseElsewhere)
     {
         var mono = (FontFamily)this.FindResource("MonoFont")!;
-        var current = TxtSetupFile.Text?.Trim() ?? "";
+        var current = currentChoice?.Trim() ?? "";
         var menu = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
 
         foreach (var relative in found.RelativePaths)
@@ -221,7 +379,7 @@ public partial class MainWindow : Window
                     : null,
             };
             AutomationProperties.SetName(item, relative);
-            item.Click += (_, _) => TxtSetupFile.Text = full;
+            item.Click += (_, _) => pick(full);
             menu.Items.Add(item);
         }
 
@@ -235,19 +393,24 @@ public partial class MainWindow : Window
         menu.Items.Add(new Separator());
         var browse = new MenuItem { Header = new TextBlock { Text = "Browse…", FontSize = 12.5 } };
         AutomationProperties.SetName(browse, "Browse for another file");
-        browse.Click += async (_, _) => await BrowseSetupFileAsync();
+        browse.Click += async (_, _) => await browseElsewhere();
         menu.Items.Add(browse);
         return menu;
     }
 
     private async Task BrowseSetupFileAsync()
     {
+        if (await PickSetupFileAsync(TxtSourceFolder.Text) is { } path) TxtSetupFile.Text = path;
+    }
+
+    private async Task<string?> PickSetupFileAsync(string? startFolder)
+    {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = "Select the setup file",
             AllowMultiple = false,
             SuggestedStartLocation = await StartLocationAsync(
-                Directory.Exists(TxtSourceFolder.Text) ? TxtSourceFolder.Text : null),
+                Directory.Exists(startFolder) ? startFolder : null),
             FileTypeFilter =
             [
                 new FilePickerFileType("Installers")
@@ -257,7 +420,7 @@ public partial class MainWindow : Window
                 new FilePickerFileType("All files") { Patterns = ["*"] },
             ],
         });
-        if (files.Count > 0) TxtSetupFile.Text = files[0].Path.LocalPath;
+        return files.Count > 0 ? files[0].Path.LocalPath : null;
     }
 
     private async Task<string?> PickFolderAsync(string title, string? initial)
@@ -411,6 +574,7 @@ public partial class MainWindow : Window
 
     private string? ValidateInputs()
     {
+        if (InQueue) return ValidateQueueInputs();
         if (string.IsNullOrWhiteSpace(TxtSourceFolder.Text) || !Directory.Exists(TxtSourceFolder.Text))
             return "Source folder is missing or does not exist.";
         if (string.IsNullOrWhiteSpace(TxtSetupFile.Text) || !File.Exists(TxtSetupFile.Text))
@@ -560,9 +724,12 @@ public partial class MainWindow : Window
         if (_running) return;
 
         var pathsSet = PathsSet();
-        var ready = pathsSet >= 3;
         var signingOn = ChkSignPayload.IsChecked == true;
         var allValid = ValidateInputs() is null;
+        // "Ready" is about the files step only: signing has its own card.
+        var ready = InQueue
+            ? _queue.All(i => BatchQueue.Problem(i) is null) && !string.IsNullOrWhiteSpace(TxtOutputFolder.Text)
+            : pathsSet >= 3;
 
         TxtSubtitleEmpty.IsVisible = !ready;
         TxtSubtitleReady.IsVisible = ready;
@@ -576,7 +743,7 @@ public partial class MainWindow : Window
         RowOutput.Classes.Set("filled", !string.IsNullOrWhiteSpace(TxtOutputFolder.Text));
         RowOutputName.Classes.Set("filled", !string.IsNullOrWhiteSpace(TxtOutputName.Text));
         RowOverwrite.Classes.Set("filled", ready);   // rows compress together once filled
-        DropZone.IsVisible = string.IsNullOrWhiteSpace(TxtSourceFolder.Text);
+        DropZone.IsVisible = !InQueue && string.IsNullOrWhiteSpace(TxtSourceFolder.Text);
 
         // Step 2: preview at 55% until the switch is on; indigo border while expanded.
         Card2.Classes.Set("preview", !signingOn);
@@ -592,7 +759,12 @@ public partial class MainWindow : Window
         BtnPackage.IsEnabled = allValid;
         KbdChip.IsVisible = allValid;
 
-        if (ValidateInputs() is { } error && pathsSet > 0)
+        if (InQueue)
+        {
+            if (ValidateInputs() is { } queueError) SetStatus(queueError, "Error");
+            else SetStatus(BatchQueue.ReadyStatus(_queue.Count, signingOn), null);
+        }
+        else if (ValidateInputs() is { } error && pathsSet > 0)
             SetStatus(error, "Error");
         else
             SetStatus(PackagingFlow.PathsStatus(pathsSet, signingOn), null);
@@ -603,6 +775,7 @@ public partial class MainWindow : Window
     private async Task RefreshDerivedAsync()
     {
         var gen = ++_derivedGeneration;
+        if (InQueue) return;   // the header shows the queue's own summary
         var source = TxtSourceFolder.Text;
         var setup = TxtSetupFile.Text;
 
@@ -670,6 +843,12 @@ public partial class MainWindow : Window
 
         SaveCurrentSettings();
 
+        if (InQueue)
+        {
+            await RunQueueAsync();
+            return;
+        }
+
         var source = TxtSourceFolder.Text!.Trim();
         var setup = TxtSetupFile.Text!.Trim();
         var output = TxtOutputFolder.Text!.Trim();
@@ -684,35 +863,13 @@ public partial class MainWindow : Window
 
         try
         {
-            // Signing runs BEFORE wrapping (in place); the app drives its stage
-            // row directly since the engine's log lines aren't prefix-stable.
-            if (signing)
-            {
-                ActivateStage(PackageStage.Sign);
-                var options = BuildSigningOptions();   // reads controls — must stay on the UI thread
+            var options = signing ? BuildSigningOptions() : null;   // reads controls — must stay on the UI thread
+            var (outputPath, runError, failedStage) = await SignAndPackageAsync(
+                source, setup, output, NullIfBlank(TxtOutputName.Text), options,
+                ChkOverwrite.IsChecked == true, progress, _cts.Token);
 
-                // Task.Run for the same reason PackageAsync uses it internally:
-                // the in-process signing engine does synchronous crypto and
-                // network work (Azure endpoint, TSA) before/without yielding,
-                // which beachballs the UI thread if called from it.
-                var ct = _cts.Token;
-                var signed = await Task.Run(async () =>
-                {
-                    var signer = PayloadSigner.TryCreate(options, out var locateError);
-                    if (signer is null) return SignResult.Fail(locateError!);
-                    return await signer.SignAsync(source, setup, options, progress, ct);
-                });
-
-                if (!signed.Success) { FailRun(PackageStage.Sign, signed.Error!); return; }
-                SetStageDone(PackageStage.Sign, PackagingFlow.SignStageDetail(CurrentCertMode(), TxtPfxPath.Text));
-            }
-
-            var request = new PackageRequest(source, setup, output, ChkOverwrite.IsChecked == true,
-                NullIfBlank(TxtOutputName.Text));
-            var result = await _packager.PackageAsync(request, progress, _cts.Token);
-
-            if (result.Success) CompleteRun(result.OutputPath!);
-            else FailRun(_activeStage ?? PackageStage.Assemble, result.Error!);
+            if (outputPath is not null) CompleteRun(outputPath);
+            else FailRun(failedStage, runError!);
         }
         catch (OperationCanceledException)
         {
@@ -734,6 +891,211 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>One package, start to finish: sign the payload if asked, then
+    /// wrap it. Shared by the single run and each item of a batch. Returns the
+    /// package's path, or the error and the stage it happened in.</summary>
+    private async Task<(string? OutputPath, string? Error, PackageStage FailedStage)> SignAndPackageAsync(
+        string source, string setup, string output, string? outputName, SigningOptions? signing,
+        bool overwrite, IProgress<string> progress, CancellationToken ct)
+    {
+        // Signing runs BEFORE wrapping (in place); the app drives its stage
+        // row directly since the engine's log lines aren't prefix-stable.
+        if (signing is not null)
+        {
+            ActivateStage(PackageStage.Sign);
+
+            // Task.Run for the same reason PackageAsync uses it internally:
+            // the in-process signing engine does synchronous crypto and
+            // network work (Azure endpoint, TSA) before/without yielding,
+            // which beachballs the UI thread if called from it.
+            var signed = await Task.Run(async () =>
+            {
+                var signer = PayloadSigner.TryCreate(signing, out var locateError);
+                if (signer is null) return SignResult.Fail(locateError!);
+                return await signer.SignAsync(source, setup, signing, progress, ct);
+            });
+
+            if (!signed.Success) return (null, signed.Error!, PackageStage.Sign);
+            SetStageDone(PackageStage.Sign, PackagingFlow.SignStageDetail(CurrentCertMode(), TxtPfxPath.Text));
+        }
+
+        var result = await _packager.PackageAsync(
+            new PackageRequest(source, setup, output, overwrite, outputName), progress, ct);
+        return result.Success
+            ? (result.OutputPath, null, PackageStage.Assemble)
+            : (null, result.Error!, _activeStage ?? PackageStage.Assemble);
+    }
+
+    /// <summary>Packages every queued folder in turn, with the same output
+    /// folder, overwrite and signing settings. One failing doesn't stop the
+    /// rest; Cancel stops the current one and leaves the remainder not run.</summary>
+    private async Task RunQueueAsync()
+    {
+        var items = _queue.ToList();
+        var output = TxtOutputFolder.Text!.Trim();
+        bool signing = ChkSignPayload.IsChecked == true;
+        bool overwrite = ChkOverwrite.IsChecked == true;
+        var options = signing ? BuildSigningOptions() : null;
+        var progress = new Progress<string>(OnProgressLine);
+        var total = System.Diagnostics.Stopwatch.StartNew();
+        var results = new List<QueueResult>();
+        _cts = new CancellationTokenSource();
+
+        try
+        {
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (_cts.IsCancellationRequested)
+                {
+                    results.Add(new QueueResult(item, null, null));   // never ran
+                    continue;
+                }
+
+                var setup = item.SetupFile!;
+                bool isMsi = Path.GetExtension(setup).Equals(".msi", StringComparison.OrdinalIgnoreCase);
+                EnterRunningMode(item.Folder, setup, output, signing, isMsi);
+                TxtRunTitle.Text = $"Packaging {i + 1} of {items.Count}";
+                AppendOutput($"── {i + 1} of {items.Count} · {item.FolderName} ──");
+
+                try
+                {
+                    var (outputPath, error, _) = await SignAndPackageAsync(
+                        item.Folder, setup, output, item.OutputName, options, overwrite, progress, _cts.Token);
+                    results.Add(new QueueResult(item, outputPath, error));
+                    if (error is not null) AppendOutput("ERROR  " + error);
+                }
+                catch (OperationCanceledException)
+                {
+                    results.Add(new QueueResult(item, null, "Cancelled."));
+                }
+                catch (Exception ex)
+                {
+                    // Same backstop as the single run: nothing may escape and
+                    // take the process (and the rest of the batch) down.
+                    results.Add(new QueueResult(item, null, ex.Message));
+                    AppendOutput("ERROR  " + ex.Message);
+                }
+
+                // Progress<T> posts its lines; let this item's stragglers land
+                // before the next item rebuilds the stage rows they refer to.
+                await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+            }
+
+            CompleteQueue(results, output, total.Elapsed);
+        }
+        finally
+        {
+            _cts?.Dispose();
+            _cts = null;
+            StopRunTimers();
+        }
+    }
+
+    /// <summary>The batch's done screen: a line per folder — the package it
+    /// became and its size, or why it didn't.</summary>
+    private void CompleteQueue(IReadOnlyList<QueueResult> results, string output, TimeSpan elapsed)
+    {
+        _activeStage = null;
+        _running = false;
+        _queueDone = true;
+        _rawLogVisible = false;
+        StopRunTimers();
+
+        TxtRunTitle.Text = BatchQueue.ResultTitle(results);
+        TxtPercent.Text = "Done";
+        BreadcrumbCard.IsVisible = false;
+        RunHero.IsVisible = false;
+        ReceiptCard.IsVisible = false;
+        StageCard.IsVisible = false;
+        RawLogCard.IsVisible = false;
+        BtnRawLog.Content = "raw log ▾";
+
+        QueueResultList.Children.Clear();
+        var where = new TextBlock
+        {
+            // Time first: the path is the part that can be long enough to trim.
+            Text = $"{PackagingFlow.FormatElapsed(elapsed)} total · saved to {Abbreviate(output)}",
+            Margin = new Thickness(16, 8, 16, 10),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        ToolTip.SetTip(where, output);
+        where.Classes.Add("monoHint");
+        QueueResultList.Children.Add(where);
+        foreach (var result in results)
+            QueueResultList.Children.Add(BuildQueueResultRow(result));
+        QueueResultCard.IsVisible = true;
+
+        // Reveal points at the last package built (Finder opens the folder with
+        // it selected); with none built there is nothing to reveal.
+        _lastOutputPath = results.LastOrDefault(r => r.Success)?.OutputPath;
+        _lastOutputFile = null;
+
+        BtnCancel.IsVisible = false;
+        BtnNewPackage.IsVisible = true;
+        BtnOpenOutput.IsVisible = _lastOutputPath is not null;
+        BtnPackage.IsVisible = false;
+
+        var allGood = results.All(r => r.Success);
+        AppendOutput(BatchQueue.ResultStatus(results));
+        SetStatus(BatchQueue.ResultStatus(results), allGood ? "Success" : "Error");
+    }
+
+    private Border BuildQueueResultRow(QueueResult result)
+    {
+        var badge = new Border
+        {
+            Child = new TextBlock { Text = result.Success ? "✓" : result.Skipped ? "–" : "✕" },
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        badge.Classes.Add("badge");
+        if (result.Success) badge.Classes.Add("done");
+        else if (!result.Skipped) badge.Classes.Add("failed");
+
+        var name = new TextBlock
+        {
+            Text = result.Success ? Path.GetFileName(result.OutputPath) : result.Item.FolderName,
+            FontFamily = (FontFamily)this.FindResource("MonoFont")!,
+            FontSize = 12,
+            Margin = new Thickness(12, 0, 12, 0),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+
+        string detailText;
+        if (result.Success)
+        {
+            long size = 0;
+            try { size = new FileInfo(result.OutputPath!).Length; } catch { /* shown as 0 B */ }
+            detailText = PackagingFlow.FormatSize(size);
+        }
+        else
+        {
+            detailText = result.Skipped ? "not run" : result.Error!;
+        }
+        var detail = new TextBlock
+        {
+            Text = detailText,
+            MaxWidth = 300,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+        };
+        detail.Classes.Add("monoHint");
+        if (result.Error is not null) detail.Classes.Add("queueProblem");
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
+        Grid.SetColumn(name, 1);
+        Grid.SetColumn(detail, 2);
+        grid.Children.Add(badge);
+        grid.Children.Add(name);
+        grid.Children.Add(detail);
+
+        var row = new Border { Height = 38, Padding = new Thickness(16, 0), Child = grid };
+        // The full story is a hover away: where it went, or the whole error.
+        ToolTip.SetTip(row, result.Success ? result.OutputPath : result.Skipped ? "Not run — the batch was cancelled." : result.Error);
+        return row;
+    }
+
     private void BtnCancel_Click(object? sender, RoutedEventArgs e)
     {
         // The zip stage can't be interrupted mid-stream (BCL limitation), so a
@@ -750,7 +1112,9 @@ public partial class MainWindow : Window
     private void BtnRawLog_Click(object? sender, RoutedEventArgs e)
     {
         _rawLogVisible = !_rawLogVisible;
-        StageCard.IsVisible = !_rawLogVisible;
+        // After a batch the results list has the stage card's place; the log
+        // opens beneath it instead of swapping with it.
+        StageCard.IsVisible = !_rawLogVisible && !_queueDone;
         RawLogCard.IsVisible = _rawLogVisible;
         BtnRawLog.Content = _rawLogVisible ? "raw log ▴" : "raw log ▾";
     }
@@ -798,6 +1162,8 @@ public partial class MainWindow : Window
         BreadcrumbCard.IsVisible = true;
         RunHero.IsVisible = true;
         ReceiptCard.IsVisible = false;
+        QueueResultCard.IsVisible = false;
+        _queueDone = false;
         TxtPercent.Foreground = B("Fg");
         TxtBreadcrumb.Text =
             $"{Path.GetFileName(Path.TrimEndingDirectorySeparator(source))}/ → {Path.GetFileName(setup)} → {Abbreviate(output)}";
@@ -1236,11 +1602,9 @@ public partial class MainWindow : Window
 
     private void OnWindowDragOver(object? sender, DragEventArgs e)
     {
-        var path = _draggingOut ? null : GetDropPath(e);
-        e.DragEffects = path is not null ? DragDropEffects.Link : DragDropEffects.None;
-        ShowDropTarget(path is null
-            ? null
-            : PackagingFlow.ClassifyDrop(path, Directory.Exists(path), IsWithin(e, RowOutput)));
+        var kind = ClassifyDrag(e, out _);
+        e.DragEffects = kind is not null ? DragDropEffects.Link : DragDropEffects.None;
+        ShowDropTarget(kind);
         e.Handled = true;
     }
 
@@ -1256,7 +1620,8 @@ public partial class MainWindow : Window
         RowSource.Classes.Set("dropTarget", kind == DropKind.SourceFolder);
         RowSetup.Classes.Set("dropTarget", kind == DropKind.SetupFile);
         RowOutput.Classes.Set("dropTarget", kind == DropKind.OutputFolder);
-        DropZone.Classes.Set("dropTarget", kind is DropKind.SourceFolder or DropKind.InspectPackage);
+        DropZone.Classes.Set("dropTarget",
+            kind is DropKind.SourceFolder or DropKind.InspectPackage or DropKind.Queue);
 
         if (_running) return;   // the footer belongs to the run
         if (kind is { } k) SetStatus(PackagingFlow.DropHint(k), "AccentLink");
@@ -1266,10 +1631,14 @@ public partial class MainWindow : Window
     private void OnWindowDrop(object? sender, DragEventArgs e)
     {
         ShowDropTarget(null);
-        if (_draggingOut || GetDropPath(e) is not { } path) return;
+        if (ClassifyDrag(e, out var paths) is not { } kind) return;
+        var path = paths[0];
 
-        switch (PackagingFlow.ClassifyDrop(path, Directory.Exists(path), IsWithin(e, RowOutput)))
+        switch (kind)
         {
+            case DropKind.Queue when !_running:
+                AddToQueue(paths);
+                break;
             case DropKind.InspectPackage:
                 // Inspecting is read-only, so it's fine even mid-run.
                 new InspectWindow(path).Show(this);
@@ -1290,11 +1659,16 @@ public partial class MainWindow : Window
     private static bool IsWithin(DragEventArgs e, Visual target) =>
         e.Source is Visual v && (v == target || v.GetVisualAncestors().Contains(target));
 
-    private static string? GetDropPath(DragEventArgs e)
+    /// <summary>What dropping the dragged items here would do (null = nothing),
+    /// and the items themselves.</summary>
+    private DropKind? ClassifyDrag(DragEventArgs e, out List<string> paths)
     {
         // DataTransfer is the Avalonia 12 API (Data is obsolete on 11.3).
-        var files = e.DataTransfer.TryGetFiles()?.ToArray();
-        return files is { Length: 1 } ? files[0].Path.LocalPath : null;
+        paths = _draggingOut
+            ? []
+            : e.DataTransfer.TryGetFiles()?.Select(f => f.Path.LocalPath).ToList() ?? [];
+        return PackagingFlow.ClassifyDrops(
+            paths.Select(p => (p, Directory.Exists(p))).ToList(), IsWithin(e, RowOutput), InQueue);
     }
 
     // ── macOS menu bar ───────────────────────────────────────────────────────
