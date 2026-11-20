@@ -54,20 +54,34 @@ jobs:
         timeout-minutes: 5
         run: dotnet build --configuration Release --no-restore
 
-      # blame-hang fires at 4m, inside this step's 8m budget, so the dump is
-      # written and uploaded rather than lost to the step timeout.
+      # The step and blame-hang timeouts above this were not enough on their
+      # own: on 2026-11-20 this step wedged twice (PR #34) for 20+ minutes.
+      # blame-hang never ended the tests, the 8m step timeout never ended the
+      # step, and GitHub kept no log for either run. So the tests now run under
+      # .github/scripts/watchdog.sh, which keeps their output in a file (nothing
+      # can hold the step's output pipe open) and, at 5 minutes, prints the
+      # process list and the output so far before killing them.
+      #
+      # blame-hang is down to 2m with dump collection OFF: it still kills the
+      # test host and names the test that was running, without depending on a
+      # dump being written — one suspect for what wedged. Normal verbosity
+      # prints each test as it finishes, so a hang shows how far the run got.
+      # A normal run is ~10s of tests; every limit here is far above that.
       - name: Test
         timeout-minutes: 8
         run: >
+          bash .github/scripts/watchdog.sh 300
           dotnet test --configuration Release --no-build
-          --blame-hang --blame-hang-timeout 4m --blame-hang-dump-type mini
+          --logger "console;verbosity=normal"
+          --blame-hang --blame-hang-timeout 2m --blame-hang-dump-type none
 
-      - name: Upload hang dumps
+      - name: Upload hang diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: test-hang-diagnostics
           path: |
+            test-output.log
             **/TestResults/**/*.dmp
             **/TestResults/**/Sequence_*.xml
           if-no-files-found: ignore
