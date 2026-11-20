@@ -12,6 +12,7 @@ public sealed class PackagingFlowTests
 {
     [Theory]
     [InlineData("Zipping payload…", PackageStage.Zip)]
+    [InlineData("Zipping… 40%", PackageStage.Zip)]
     [InlineData("Encrypting (AES-256-CBC) and computing HMAC-SHA256…", PackageStage.Encrypt)]
     [InlineData("Encrypting… 30%", PackageStage.Encrypt)]
     [InlineData("Reading MSI metadata…", PackageStage.MsiMetadata)]
@@ -36,6 +37,29 @@ public sealed class PackagingFlowTests
     [InlineData("Zipping payload…", null)]
     public void Encrypt_percent_is_parsed_from_chunk_progress_lines(string line, int? expected)
         => Assert.Equal(expected, PackagingFlow.EncryptPercent(line));
+
+    [Theory]
+    [InlineData("Zipping… 40%", 40)]
+    [InlineData("Zipping payload…", null)]
+    [InlineData("Encrypting… 30%", null)]
+    public void Zip_percent_is_parsed_from_chunk_progress_lines(string line, int? expected)
+        => Assert.Equal(expected, PackagingFlow.ZipPercent(line));
+
+    [Theory]
+    [InlineData("Zoom 6.1", "setup.msi", "setup")]                       // official-tool naming
+    [InlineData("Zoom 6.1", "Invoke-AppDeployToolkit.exe", "Zoom 6.1")]  // PSADT v4 launcher
+    [InlineData("Zoom 6.1", "Deploy-Application.exe", "Zoom 6.1")]       // PSADT v3 launcher
+    [InlineData("Zoom 6.1", "deploy-application.EXE", "Zoom 6.1")]
+    [InlineData(null, "Invoke-AppDeployToolkit.exe", "Invoke-AppDeployToolkit")]
+    [InlineData("Zoom 6.1", null, "")]
+    [InlineData("Zoom 6.1", "  ", "")]
+    public void Default_output_name_is_the_setup_name_or_the_folder_for_psadt(
+        string? folder, string? setup, string expected)
+    {
+        var source = folder is null ? null : Path.Combine(Path.GetTempPath(), folder) + Path.DirectorySeparatorChar;
+        var setupPath = string.IsNullOrWhiteSpace(setup) || source is null ? setup : Path.Combine(source, setup);
+        Assert.Equal(expected, PackagingFlow.DefaultOutputName(source, setupPath));
+    }
 
     [Theory]
     [InlineData(0, "0 of 3 paths set")]

@@ -37,6 +37,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<PackageStage, StageRow> _stageRows = new();
     private PackageStage? _activeStage;
     private int? _encryptPercent;
+    private int? _zipPercent;
     private readonly System.Diagnostics.Stopwatch _elapsed = new();
     private DispatcherTimer? _elapsedTimer;
     private DispatcherTimer? _spinTimer;
@@ -336,6 +337,8 @@ public partial class MainWindow : Window
             return "Setup file is missing or does not exist.";
         if (string.IsNullOrWhiteSpace(TxtOutputFolder.Text))
             return "Output folder is not specified.";
+        if (IntuneWinWriter.OutputNameError(TxtOutputName.Text) is { } nameError)
+            return nameError;
         return ValidateSigningInputs();
     }
 
@@ -378,10 +381,22 @@ public partial class MainWindow : Window
 
     private void WireDerivedFields()
     {
-        TxtSourceFolder.TextChanged += (_, _) => OnPathsChanged();
-        TxtSetupFile.TextChanged += (_, _) => OnPathsChanged();
+        TxtSourceFolder.TextChanged += (_, _) => { RefreshOutputName(); OnPathsChanged(); };
+        TxtSetupFile.TextChanged += (_, _) => { RefreshOutputName(); OnPathsChanged(); };
         TxtOutputFolder.TextChanged += (_, _) => OnPathsChanged();
+        TxtOutputName.TextChanged += (_, _) => OnPathsChanged();
+        RefreshOutputName();   // paths restored from settings were set before this was wired
     }
+
+    /// <summary>Re-derives the output name whenever the source or setup file
+    /// changes. Deliberately replaces a hand-typed name: one left over from the
+    /// previous package is exactly how two packages end up overwriting each other.</summary>
+    private void RefreshOutputName() =>
+        TxtOutputName.Text = PackagingFlow.DefaultOutputName(TxtSourceFolder.Text, TxtSetupFile.Text);
+
+    /// <summary>The file name the package will be written as.</summary>
+    private string OutputFileName() =>
+        IntuneWinWriter.ResolveOutputName(TxtOutputName.Text, TxtSetupFile.Text ?? "") + ".intunewin";
 
     /// <summary>Every input <see cref="ValidateSigningInputs"/> reads refreshes the
     /// footer as it changes; no debounce — these checks are cheap and local,
@@ -434,7 +449,8 @@ public partial class MainWindow : Window
         var ready = pathsSet >= 3;
         var signingOn = ChkSignPayload.IsChecked == true;
         var signingValid = ValidateSigningInputs() is null;
-        var allValid = ready && signingValid;
+        var nameValid = IntuneWinWriter.OutputNameError(TxtOutputName.Text) is null;
+        var allValid = ready && nameValid && signingValid;
 
         TxtSubtitleEmpty.IsVisible = !ready;
         TxtSubtitleReady.IsVisible = ready;
@@ -446,6 +462,7 @@ public partial class MainWindow : Window
         RowSource.Classes.Set("filled", !string.IsNullOrWhiteSpace(TxtSourceFolder.Text));
         RowSetup.Classes.Set("filled", !string.IsNullOrWhiteSpace(TxtSetupFile.Text));
         RowOutput.Classes.Set("filled", !string.IsNullOrWhiteSpace(TxtOutputFolder.Text));
+        RowOutputName.Classes.Set("filled", !string.IsNullOrWhiteSpace(TxtOutputName.Text));
         RowOverwrite.Classes.Set("filled", ready);   // rows compress together once filled
 
         // Step 2: preview at 55% until the switch is on; indigo border while expanded.
@@ -457,7 +474,7 @@ public partial class MainWindow : Window
         // Output preview appears in the footer once there's something to show.
         TxtPackageHint.IsVisible = ready && !string.IsNullOrWhiteSpace(TxtSetupFile.Text);
         if (TxtPackageHint.IsVisible)
-            TxtPackageHint.Text = $"→ {Path.GetFileNameWithoutExtension(TxtSetupFile.Text)}.intunewin";
+            TxtPackageHint.Text = $"→ {OutputFileName()}";
 
         BtnPackage.IsEnabled = allValid;
         KbdChip.IsVisible = allValid;
@@ -491,6 +508,7 @@ public partial class MainWindow : Window
                 long bytes = 0;
                 foreach (var f in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
                 {
+                    if (IntuneWinWriter.IsMacMetadataFile(f)) continue;   // the engine leaves these out
                     count++;
                     try { bytes += new FileInfo(f).Length; } catch { /* unreadable — skip */ }
                 }
@@ -508,7 +526,7 @@ public partial class MainWindow : Window
             : "or drop a folder anywhere";
         if (BtnPackage.IsEnabled && !string.IsNullOrWhiteSpace(setup))
             TxtPackageHint.Text =
-                $"→ {Path.GetFileNameWithoutExtension(setup)}.intunewin · est. {PackagingFlow.FormatSize(totalBytes)}";
+                $"→ {OutputFileName()} · est. {PackagingFlow.FormatSize(totalBytes)}";
 
         if (!string.IsNullOrWhiteSpace(setup) && File.Exists(setup) &&
             Path.GetExtension(setup).Equals(".msi", StringComparison.OrdinalIgnoreCase))
@@ -577,7 +595,8 @@ public partial class MainWindow : Window
                 SetStageDone(PackageStage.Sign, PackagingFlow.SignStageDetail(CurrentCertMode(), TxtPfxPath.Text));
             }
 
-            var request = new PackageRequest(source, setup, output, ChkOverwrite.IsChecked == true);
+            var request = new PackageRequest(source, setup, output, ChkOverwrite.IsChecked == true,
+                NullIfBlank(TxtOutputName.Text));
             var result = await _packager.PackageAsync(request, progress, _cts.Token);
 
             if (result.Success) CompleteRun(result.OutputPath!);
@@ -638,6 +657,7 @@ public partial class MainWindow : Window
         _running = true;
         _rawLogVisible = false;
         _encryptPercent = null;
+        _zipPercent = null;
         _activeStage = null;
         _activeSpinner = null;
 
@@ -723,6 +743,8 @@ public partial class MainWindow : Window
 
         if (PackagingFlow.EncryptPercent(line) is { } pct)
             _encryptPercent = pct;
+        if (PackagingFlow.ZipPercent(line) is { } zipPct)
+            _zipPercent = zipPct;
 
         if (PackagingFlow.StageFor(line) is { } stage && _stageRows.ContainsKey(stage))
             ActivateStage(stage);
@@ -802,7 +824,12 @@ public partial class MainWindow : Window
     {
         if (_stageRows.Count == 0) return;
         var completed = _stageRows.Values.Count(r => r.State == StageState.Done);
-        var inStage = _activeStage == PackageStage.Encrypt ? _encryptPercent : null;
+        var inStage = _activeStage switch
+        {
+            PackageStage.Zip => _zipPercent,
+            PackageStage.Encrypt => _encryptPercent,
+            _ => null,
+        };
         var fraction = PackagingFlow.OverallFraction(_stageRows.Count, completed, inStage);
         BarRun.Value = fraction;
         if (TxtPercent.Text != "Done")

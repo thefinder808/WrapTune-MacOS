@@ -50,10 +50,53 @@ public sealed class MainWindowFlowTests
         Assert.True(w.FindControl<Button>("BtnNewPackage")!.IsVisible);
     }
 
+    [AvaloniaFact]
+    public void Output_name_follows_the_setup_file_and_uses_the_folder_for_psadt()
+    {
+        using var fixture = new FlowFixture();
+        var w = new MainWindow();
+        w.Show();
+        var name = w.FindControl<TextBox>("TxtOutputName")!;
+        var source = Path.Combine(fixture.Root, "Zoom 6.1");
+
+        w.FindControl<TextBox>("TxtSourceFolder")!.Text = source;
+        w.FindControl<TextBox>("TxtSetupFile")!.Text = Path.Combine(source, "setup.msi");
+        FlowFixture.Pump(TimeSpan.FromMilliseconds(100));
+        Assert.Equal("setup", name.Text);
+
+        w.FindControl<TextBox>("TxtSetupFile")!.Text = Path.Combine(source, "Invoke-AppDeployToolkit.exe");
+        FlowFixture.Pump(TimeSpan.FromMilliseconds(100));
+        Assert.Equal("Zoom 6.1", name.Text);
+
+        // A hand-typed name must not carry over to the next package.
+        name.Text = "Custom";
+        w.FindControl<TextBox>("TxtSourceFolder")!.Text = Path.Combine(fixture.Root, "Chrome 130");
+        FlowFixture.Pump(TimeSpan.FromMilliseconds(100));
+        Assert.Equal("Chrome 130", name.Text);
+    }
+
+    [AvaloniaFact]
+    public void An_edited_output_name_names_the_package_and_a_bad_one_blocks_packaging()
+    {
+        using var fixture = new FlowFixture();
+        var w = fixture.RunPackageToCompletion(outputName: "Zoom 6.1");
+
+        Assert.True(File.Exists(Path.Combine(fixture.Root, "out", "Zoom 6.1.intunewin")));
+        Assert.False(File.Exists(Path.Combine(fixture.Root, "out", "setup.intunewin")));
+
+        w.FindControl<Button>("BtnNewPackage")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        FlowFixture.Pump(TimeSpan.FromMilliseconds(100));
+        w.FindControl<TextBox>("TxtOutputName")!.Text = "bad/name";
+        FlowFixture.Pump(TimeSpan.FromMilliseconds(100));
+        Assert.False(w.FindControl<Button>("BtnPackage")!.IsEnabled);
+    }
+
     /// <summary>Sandboxed settings + a tiny real payload, packaged for real.</summary>
     private sealed class FlowFixture : IDisposable
     {
         private readonly string _root;
+
+        public string Root => _root;
 
         public FlowFixture()
         {
@@ -65,7 +108,7 @@ public sealed class MainWindowFlowTests
             new AppSettings().Save();
         }
 
-        public MainWindow RunPackageToCompletion()
+        public MainWindow RunPackageToCompletion(string? outputName = null)
         {
             var w = new MainWindow();
             w.Show();
@@ -73,6 +116,11 @@ public sealed class MainWindowFlowTests
             w.FindControl<TextBox>("TxtSetupFile")!.Text = Path.Combine(_root, "src", "setup.ps1");
             w.FindControl<TextBox>("TxtOutputFolder")!.Text = Path.Combine(_root, "out");
             Pump(TimeSpan.FromMilliseconds(100));
+            if (outputName is not null)
+            {
+                w.FindControl<TextBox>("TxtOutputName")!.Text = outputName;
+                Pump(TimeSpan.FromMilliseconds(100));
+            }
 
             w.FindControl<Button>("BtnPackage")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);

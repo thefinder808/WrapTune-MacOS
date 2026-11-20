@@ -399,6 +399,16 @@
                                     </Grid>
                                 </Border>
 
+                                <Border x:Name="RowOutputName" Classes="fieldRow">
+                                    <Grid ColumnDefinitions="140,*,Auto" VerticalAlignment="Center">
+                                        <TextBlock Classes="fieldLabel" Text="Output name"/>
+                                        <TextBox x:Name="TxtOutputName" Grid.Column="1" Classes="value"
+                                                 Margin="12,0" Watermark="named after the setup file"/>
+                                        <TextBlock Grid.Column="2" Classes="monoHint" VerticalAlignment="Center"
+                                                   Text=".intunewin"/>
+                                    </Grid>
+                                </Border>
+
                                 <Border x:Name="RowOverwrite" Classes="fieldRow">
                                     <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                                         <TextBlock Classes="fieldLabel" Text="Overwrite existing output"/>

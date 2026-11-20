@@ -83,7 +83,11 @@ build is notarized, Gatekeeper accepts it without the right-click-Open workaroun
 1. **Source folder** — the folder containing your installer and any supporting files.
 2. **Setup file** — the installer within that folder (`.exe`, `.msi`, `.ps1`, …).
 3. **Output folder** — where the `.intunewin` is written.
-4. Click **Package** (⌘R) — a staged progress view tracks sign → zip → encrypt →
+4. **Output name** — pre-filled with the setup file's name, as the official tool
+   names it. For a PSADT package it's pre-filled with the source folder's name
+   instead, since every PSADT package's setup file is called
+   `Invoke-AppDeployToolkit.exe` and they would otherwise replace each other.
+5. Click **Package** (⌘R) — a staged progress view tracks sign → zip → encrypt →
    assemble, with the raw engine log behind the *raw log* disclosure — then
    upload the result in the Intune admin center as a **Windows app (Win32)**.
 
@@ -91,6 +95,12 @@ build is notarized, Gatekeeper accepts it without the right-click-Open workaroun
 
 For `.msi` setup files, the package includes the MSI metadata Intune reads to
 pre-fill the product code (e.g. the uninstall command) and the install behavior.
+
+The payload is everything in the source folder except the files macOS adds on
+its own: `.DS_Store`, and the `._name` files it writes on network shares and
+non-Apple volumes. If the output folder is inside the source folder, the
+previous copy of the package is left out too, so rebuilding never wraps the old
+package inside the new one.
 
 To audit an existing package — yours or anyone's — drop a `.intunewin` anywhere
 on the window, or use **File → Inspect Package…** (⌘I): it shows the recorded
@@ -141,6 +151,9 @@ run in CI (the engine is pure managed .NET; it doesn't even need macOS).
 ```bash
 # Wrap an installer (flags mirror the official IntuneWinAppUtil)
 wraptune pack -c ./source -s ./source/setup.msi -o ./out
+
+# Name the output yourself (default: the setup file's name)
+wraptune pack -c ./Zoom -s ./Zoom/Invoke-AppDeployToolkit.exe -o ./out --name Zoom-6.1
 
 # Inspect + verify any .intunewin (exit 0 = valid, 1 = invalid)
 wraptune inspect ./out/setup.intunewin

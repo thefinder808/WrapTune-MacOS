@@ -50,12 +50,35 @@ public static class PackagingFlow
 
     /// <summary>Parses the engine's chunked "Encrypting… NN%" lines so the bar
     /// can move inside the encrypt stage; null for every other line.</summary>
-    public static int? EncryptPercent(string line)
+    public static int? EncryptPercent(string line) => PercentAfter("Encrypting… ", line);
+
+    /// <summary>The same for the zip stage's "Zipping… NN%" lines.</summary>
+    public static int? ZipPercent(string line) => PercentAfter("Zipping… ", line);
+
+    private static int? PercentAfter(string prefix, string line)
     {
-        const string prefix = "Encrypting… ";
         if (!line.StartsWith(prefix, StringComparison.Ordinal) || !line.EndsWith('%')) return null;
         var digits = line[prefix.Length..^1];
         return int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var pct) ? pct : null;
+    }
+
+    /// <summary>Setup-file names every PSADT package shares. Naming the output
+    /// after one of these makes unrelated packages replace each other.</summary>
+    private static readonly string[] SharedSetupNames = ["Invoke-AppDeployToolkit", "Deploy-Application"];
+
+    /// <summary>The name the output-name field is pre-filled with: the setup
+    /// file's name (what the official tool uses), or the source folder's name
+    /// when the setup file is a PSADT launcher. Empty until a setup file is set.</summary>
+    public static string DefaultOutputName(string? sourceFolder, string? setupFile)
+    {
+        if (string.IsNullOrWhiteSpace(setupFile)) return "";
+        var setupName = Path.GetFileNameWithoutExtension(setupFile.Trim());
+        if (!SharedSetupNames.Contains(setupName, StringComparer.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(sourceFolder))
+            return setupName;
+
+        var folderName = Path.GetFileName(Path.TrimEndingDirectorySeparator(sourceFolder.Trim()));
+        return folderName.Length > 0 ? folderName : setupName;
     }
 
     /// <summary>Footer status for the form state.</summary>

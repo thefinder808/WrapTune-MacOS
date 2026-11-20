@@ -32,8 +32,17 @@ IntuneWinAppUtil where they overlap:
 | `-c, --source <dir>` | folder whose contents get packaged (required) |
 | `-s, --setup <file>` | the installer inside the source folder (required) |
 | `-o, --output <dir>` | where the `.intunewin` is written (required) |
+| `--name <name>` | output file name, with or without `.intunewin` (default: the setup file's name, as the official tool does) |
 | `-q, --quiet` | suppress progress output; silently overwrites (official `-q` semantics) |
 | `--overwrite` | replace an existing `.intunewin` |
+
+Use `--name` when several packages share a setup file name. Every PSADT
+package's setup file is `Invoke-AppDeployToolkit.exe`, so without it they all
+come out as `Invoke-AppDeployToolkit.intunewin` and replace each other.
+
+macOS metadata files (`.DS_Store`, `._*`) are left out of the payload. So is a
+previous copy of the output package when the output folder is inside the source
+folder, so a rebuild never wraps the last package inside the new one.
 
 The output path is printed on stdout (also in quiet mode), so scripts can
 capture it: `PKG=$(wraptune pack -q -c … -s … -o …)`.
