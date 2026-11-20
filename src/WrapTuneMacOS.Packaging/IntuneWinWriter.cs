@@ -74,12 +74,10 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
             return PackageResult.Fail("Setup file does not exist.");
 
         // The setup file must live inside the source folder (the format records a
-        // relative path). GetRelativePath normalises trailing slashes; a result
-        // that escapes upward ("..") or stays absolute means it's outside.
+        // relative path).
+        if (!IsInsideFolder(sourceFolder, setupFile))
+            return PackageResult.Fail(SetupOutsideSourceError);
         var relative = Path.GetRelativePath(sourceFolder, setupFile);
-        if (Path.IsPathRooted(relative) || relative == ".." ||
-            relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            return PackageResult.Fail("Setup file must be inside the source folder.");
 
         if (string.IsNullOrWhiteSpace(request.OutputFolder))
             return PackageResult.Fail("Output folder is not specified.");
@@ -185,6 +183,22 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
         {
             try { Directory.Delete(work, recursive: true); } catch { /* best-effort temp cleanup */ }
         }
+    }
+
+    // ── Setup file location ─────────────────────────────────────────────────
+
+    public const string SetupOutsideSourceError = "Setup file must be inside the source folder.";
+
+    /// <summary>True when <paramref name="file"/> is somewhere under
+    /// <paramref name="folder"/>. GetRelativePath normalises trailing slashes; a
+    /// result that escapes upward ("..") or stays absolute means it's outside.
+    /// Shared by the engine and the UI's live validation.</summary>
+    public static bool IsInsideFolder(string folder, string file)
+    {
+        var relative = Path.GetRelativePath(
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)), Path.GetFullPath(file));
+        return !(Path.IsPathRooted(relative) || relative is "." or ".." ||
+                 relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal));
     }
 
     // ── Output name ─────────────────────────────────────────────────────────

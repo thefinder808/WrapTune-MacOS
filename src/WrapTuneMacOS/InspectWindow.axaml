@@ -2,80 +2,126 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="WrapTuneMacOS.InspectWindow"
         Title="Inspect Package"
-        Width="560" Height="520" MinWidth="480" MinHeight="420"
+        Width="560" Height="540" MinWidth="480" MinHeight="440"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource WindowBg}"
-        FontFamily="Inter" FontSize="13">
+        FontFamily="{StaticResource UiFont}" FontSize="13">
 
+    <!-- Same vocabulary as the main window: Space Grotesk for the UI, JetBrains
+         Mono for values, 12px-radius cards with hairline row dividers. -->
     <Window.Styles>
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{DynamicResource PanelBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSoftBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+        </Style>
+        <Style Selector="Border.metaRow">
+            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="Padding" Value="16,7"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource HairlineSoft}"/>
+            <Setter Property="BorderThickness" Value="0,1,0,0"/>
+        </Style>
+        <Style Selector="Border.metaRow.first">
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
         <Style Selector="TextBlock.rowLabel">
-            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
         <Style Selector="TextBlock.rowValue">
             <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
-            <Setter Property="FontFamily" Value="Menlo"/>
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="TextAlignment" Value="Right"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
         <Style Selector="Button.secondary">
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="Padding" Value="14,0"/>
-            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ChipBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
+        <!-- Payload list: compact mono rows, not the stock 40px list items. -->
+        <Style Selector="ListBox#LstEntries ListBoxItem">
+            <Setter Property="Padding" Value="16,4"/>
+            <Setter Property="MinHeight" Value="0"/>
+        </Style>
     </Window.Styles>
 
-    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,*,Auto">
+    <Grid Margin="24,20,24,20" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
 
-        <TextBlock x:Name="TxtPkgPath" Grid.Row="0" Margin="0,0,0,12"
-                   FontFamily="Menlo" FontSize="11" TextWrapping="Wrap"
-                   Foreground="{DynamicResource Dimmer}"/>
+        <TextBlock Grid.Row="0" Text="Inspect package" FontSize="19" FontWeight="SemiBold"
+                   Foreground="{DynamicResource Fg}" LetterSpacing="-0.19"/>
+        <TextBlock x:Name="TxtPkgPath" Grid.Row="1" Margin="0,4,0,14"
+                   FontFamily="{StaticResource MonoFont}" FontSize="11" TextWrapping="Wrap"
+                   Foreground="{DynamicResource Dim}"/>
 
         <!-- Metadata -->
-        <Grid Grid.Row="1" ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
-              Margin="0,0,0,10">
-            <TextBlock Grid.Row="0" Grid.Column="0" Classes="rowLabel" Text="Name"/>
-            <TextBlock x:Name="TxtName" Grid.Row="0" Grid.Column="1" Classes="rowValue"/>
-            <TextBlock Grid.Row="1" Grid.Column="0" Classes="rowLabel" Text="Setup file"/>
-            <TextBlock x:Name="TxtSetup" Grid.Row="1" Grid.Column="1" Classes="rowValue"/>
-            <TextBlock Grid.Row="2" Grid.Column="0" Classes="rowLabel" Text="Tool version"/>
-            <TextBlock x:Name="TxtToolVersion" Grid.Row="2" Grid.Column="1" Classes="rowValue"/>
-            <TextBlock Grid.Row="3" Grid.Column="0" Classes="rowLabel" Text="Size"/>
-            <TextBlock x:Name="TxtSizes" Grid.Row="3" Grid.Column="1" Classes="rowValue"/>
-            <TextBlock Grid.Row="4" Grid.Column="0" Classes="rowLabel" Text="MSI"/>
-            <TextBlock x:Name="TxtMsi" Grid.Row="4" Grid.Column="1" Classes="rowValue" Text="—"/>
-        </Grid>
+        <Border Grid.Row="2" Classes="card" Margin="0,0,0,10">
+            <StackPanel>
+                <Border Classes="metaRow first">
+                    <Grid ColumnDefinitions="110,*">
+                        <TextBlock Classes="rowLabel" Text="Name"/>
+                        <TextBlock x:Name="TxtName" Grid.Column="1" Classes="rowValue"/>
+                    </Grid>
+                </Border>
+                <Border Classes="metaRow">
+                    <Grid ColumnDefinitions="110,*">
+                        <TextBlock Classes="rowLabel" Text="Setup file"/>
+                        <TextBlock x:Name="TxtSetup" Grid.Column="1" Classes="rowValue"/>
+                    </Grid>
+                </Border>
+                <Border Classes="metaRow">
+                    <Grid ColumnDefinitions="110,*">
+                        <TextBlock Classes="rowLabel" Text="Tool version"/>
+                        <TextBlock x:Name="TxtToolVersion" Grid.Column="1" Classes="rowValue"/>
+                    </Grid>
+                </Border>
+                <Border Classes="metaRow">
+                    <Grid ColumnDefinitions="110,*">
+                        <TextBlock Classes="rowLabel" Text="Size"/>
+                        <TextBlock x:Name="TxtSizes" Grid.Column="1" Classes="rowValue"/>
+                    </Grid>
+                </Border>
+                <Border Classes="metaRow">
+                    <Grid ColumnDefinitions="110,*">
+                        <TextBlock Classes="rowLabel" Text="MSI"/>
+                        <TextBlock x:Name="TxtMsi" Grid.Column="1" Classes="rowValue" Text="—"/>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </Border>
 
         <!-- Verification verdict -->
-        <Border Grid.Row="2" Margin="0,0,0,10" Padding="12,8"
-                Background="{DynamicResource PanelBg}"
-                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
+        <Border Grid.Row="3" Classes="card" Margin="0,0,0,10" Padding="16,10">
             <StackPanel Spacing="4">
-                <TextBlock x:Name="TxtChecks" FontFamily="Menlo" FontSize="12"
-                           Foreground="{DynamicResource Fg}" Text="Inspecting…"/>
-                <TextBlock x:Name="TxtVerdict" FontWeight="SemiBold" FontSize="12.5" Text=""/>
+                <TextBlock x:Name="TxtVerdict" FontWeight="SemiBold" FontSize="13.5" Text=""/>
+                <TextBlock x:Name="TxtChecks" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                           Foreground="{DynamicResource Dim}" Text="Inspecting…"/>
             </StackPanel>
         </Border>
 
         <!-- Payload contents -->
-        <Border Grid.Row="3" Background="{DynamicResource LogBg}"
-                BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1" CornerRadius="8">
+        <Border Grid.Row="4" Classes="card" Padding="0,6" ClipToBounds="True">
             <ListBox x:Name="LstEntries" Background="Transparent" BorderThickness="0"
-                     FontFamily="Menlo" FontSize="11.5" Foreground="{DynamicResource Dim}"/>
+                     FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                     Foreground="{DynamicResource Dim}"/>
         </Border>
 
         <!-- Footer -->
-        <Grid Grid.Row="4" Margin="0,12,0,0" ColumnDefinitions="*,Auto">
+        <Grid Grid.Row="5" Margin="0,14,0,0" ColumnDefinitions="*,Auto">
             <TextBlock x:Name="TxtInspectStatus" Grid.Column="0" VerticalAlignment="Center"
-                       FontSize="11.5" TextWrapping="Wrap" Foreground="{DynamicResource Dimmer}"/>
+                       FontFamily="{StaticResource MonoFont}" FontSize="11.5" TextWrapping="Wrap"
+                       Margin="0,0,14,0" Foreground="{DynamicResource Dim}"/>
             <Button x:Name="BtnExtract" Grid.Column="1" Classes="secondary"
                     Content="Extract payload…" IsEnabled="False" Click="OnExtract"/>
         </Grid>
