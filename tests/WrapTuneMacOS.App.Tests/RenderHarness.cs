@@ -76,6 +76,21 @@ public sealed class RenderHarness
             Pump(TimeSpan.FromMilliseconds(200));
             Capture(w, outDir, "state2-filled.png");
 
+            // Keyboard-focus frames: a path box, a segment, and a button.
+            w.FindControl<TextBox>("TxtSourceFolder")!.Focus(Avalonia.Input.NavigationMethod.Tab);
+            Pump(TimeSpan.FromMilliseconds(200));
+            Capture(w, outDir, "focus-path.png");
+            w.FindControl<RadioButton>("RbPkcs11")!.Focus(Avalonia.Input.NavigationMethod.Tab);
+            Pump(TimeSpan.FromMilliseconds(200));
+            Capture(w, outDir, "focus-segment.png");
+            w.FindControl<ToggleSwitch>("ChkOverwrite")!.Focus(Avalonia.Input.NavigationMethod.Tab);
+            Pump(TimeSpan.FromMilliseconds(200));
+            Capture(w, outDir, "focus-switch.png");
+            w.FindControl<Button>("BtnBrowseSetup")!.Focus(Avalonia.Input.NavigationMethod.Tab);
+            Pump(TimeSpan.FromMilliseconds(200));
+            Capture(w, outDir, "focus-button.png");
+            btnFocusReset(w);
+
             // real run (signing off so it succeeds) — success state of the run view
             w.FindControl<ToggleSwitch>("ChkSignPayload")!.IsChecked = false;
             Pump(TimeSpan.FromMilliseconds(400));
@@ -136,6 +151,13 @@ public sealed class RenderHarness
             AppSettings.BaseDirOverride = null;
             try { Directory.Delete(sandbox, recursive: true); } catch { /* best effort */ }
         }
+    }
+
+    /// <summary>Drop keyboard focus so later frames aren't drawn with a ring.</summary>
+    private static void btnFocusReset(Window w)
+    {
+        w.FocusManager?.ClearFocus();
+        Pump(TimeSpan.FromMilliseconds(100));
     }
 
     private static void Pump(TimeSpan duration)
