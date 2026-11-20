@@ -66,7 +66,7 @@ cat "$log"
 leftover="$(ps -axo pid=,etime=,command= 2>/dev/null |
   awk -v self="$$" 'NR == FNR { before[$1]; next } !($1 in before) && $1 != self' \
     <(printf '%s\n' "$pids_before") - |
-  grep -v -E '(ps -axo pid=|awk -v self=)' || true)"
+  grep -v -E '(ps -axo pid=|awk -v self|watchdog\.sh| \(bash\)$)' || true)"   # not this script's own helpers
 if [ -n "$leftover" ]; then
   echo "::group::Processes started during the run that are still alive"
   echo "$leftover"
