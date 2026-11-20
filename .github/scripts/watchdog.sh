@@ -73,4 +73,10 @@ if [ -n "$leftover" ]; then
   echo "::endgroup::"
 fi
 
+# How much headroom the runner has left (macOS only). One suspect for the
+# wedges is the runner running out of memory; this gives each project's cost.
+if command -v memory_pressure > /dev/null 2>&1; then
+  echo "runner memory after '$1 ${2:-} ${3:-}': $(memory_pressure 2>/dev/null | tail -1)"
+fi
+
 exit "$status"
