@@ -257,6 +257,20 @@ public sealed class ZipStepTests
     public void Blank_and_ordinary_output_names_are_accepted(string? name)
         => Assert.Null(IntuneWinWriter.OutputNameError(name));
 
+    [Fact]
+    public void A_file_is_inside_a_folder_only_when_it_is_beneath_it()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wraptune-inside");
+        var source = Path.Combine(root, "source");
+
+        Assert.True(IntuneWinWriter.IsInsideFolder(source, Path.Combine(source, "setup.exe")));
+        Assert.True(IntuneWinWriter.IsInsideFolder(source + Path.DirectorySeparatorChar, Path.Combine(source, "a", "b.exe")));
+        Assert.False(IntuneWinWriter.IsInsideFolder(source, Path.Combine(root, "setup.exe")));
+        Assert.False(IntuneWinWriter.IsInsideFolder(source, Path.Combine(root, "source-2", "setup.exe")));
+        Assert.False(IntuneWinWriter.IsInsideFolder(source, Path.Combine(source, "..", "other", "setup.exe")));
+        Assert.False(IntuneWinWriter.IsInsideFolder(source, source));
+    }
+
     [Theory]
     [InlineData(".DS_Store", true)]
     [InlineData("/some/folder/.DS_Store", true)]

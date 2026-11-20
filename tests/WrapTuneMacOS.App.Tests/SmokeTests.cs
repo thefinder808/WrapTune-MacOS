@@ -83,13 +83,26 @@ public sealed class SmokeTests
         AppSettings.BaseDirOverride = dir;
         try
         {
-            new AppSettings { Theme = "Midnight" }.Save();
+            // A hand-picked theme is honored either way.
+            new AppSettings { Theme = "Midnight", ThemeChosen = true }.Save();
             new MainWindow().Show();
             Assert.Equal(ThemeVariant.Dark, Application.Current!.RequestedThemeVariant);
 
-            new AppSettings { Theme = "Daylight" }.Save();
+            new AppSettings { Theme = "Daylight", ThemeChosen = true }.Save();
             new MainWindow().Show();
             Assert.Equal(ThemeVariant.Light, Application.Current!.RequestedThemeVariant);
+
+            // Never picked (a fresh install, or settings from before ThemeChosen
+            // existed that still hold the old default): follow macOS.
+            new AppSettings { Theme = "Daylight" }.Save();
+            new MainWindow().Show();
+            Assert.Equal(ThemeVariant.Default, Application.Current!.RequestedThemeVariant);
+
+            // Older settings holding "Midnight" can only mean the user chose it —
+            // Daylight was the default — so it survives the upgrade.
+            new AppSettings { Theme = "Midnight" }.Save();
+            new MainWindow().Show();
+            Assert.Equal(ThemeVariant.Dark, Application.Current!.RequestedThemeVariant);
         }
         finally
         {

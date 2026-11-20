@@ -18,8 +18,12 @@ public sealed class AppSettings
     public string? SetupFile { get; set; }
     public string? OutputFolder { get; set; }
 
-    /// <summary>"Daylight" (default) or "Midnight".</summary>
+    /// <summary>"Daylight" or "Midnight" — used only when <see cref="ThemeChosen"/>.</summary>
     public string Theme { get; set; } = "Daylight";
+
+    /// <summary>True once the user has picked a theme by hand. Until then the
+    /// app follows the macOS appearance.</summary>
+    public bool ThemeChosen { get; set; }
 
     /// <summary>Persist the Overwrite checkbox across runs.</summary>
     public bool Overwrite { get; set; } = true;

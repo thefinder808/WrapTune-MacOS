@@ -59,7 +59,7 @@ nowhere in the chain.
   contents, and can extract the decrypted payload.
 - **`wraptune` CLI** — the same engine, scriptable: `pack`, `inspect`, and `extract`
   for CI and automation. See [Command line](#command-line).
-- Light / dark theme.
+- Light / dark theme that follows the macOS appearance until you pick one.
 - **In-app auto-updates** — checks GitHub Releases on launch (once a day) and from
   **Help → Check for Updates…**, then one-click download → verify → install → relaunch.
   Only a notarized, Developer-ID-signed build is ever installed.
@@ -176,8 +176,9 @@ official tool's `-a` Win10-S-mode catalog signing isn't reimplemented). Since
 v2.0 the window is a single three-step flow — a grouped **Files** card
 (source / setup / output / overwrite), an optional **Sign payload** step (see
 above) that the Windows tool delegates to a separate signing tool, and one
-**Package** action with a staged progress view. Light/dark theme lives under
-**Window → Toggle Theme** (⌘T).
+**Package** action with a staged progress view. The theme follows the macOS
+appearance; **Window → Toggle Theme** (⌘T) picks one by hand and **Window → Use
+System Appearance** goes back to following.
 
 ## Verifying a package
 

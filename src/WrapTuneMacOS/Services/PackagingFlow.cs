@@ -120,6 +120,41 @@ public static class PackagingFlow
         }
     }
 
+    /// <summary>A path as the form shows it: the home folder shortened to "~".
+    /// <paramref name="home"/> is a parameter so this stays testable.</summary>
+    public static string AbbreviateHome(string? path, string? home)
+    {
+        path = path?.Trim() ?? "";
+        home = string.IsNullOrEmpty(home) ? null : Path.TrimEndingDirectorySeparator(home);
+        if (home is null || !path.StartsWith(home, StringComparison.Ordinal)) return path;
+
+        // "/Users/sam" must not abbreviate "/Users/samantha/…".
+        var rest = path[home.Length..];
+        return rest.Length == 0 || rest[0] == Path.DirectorySeparatorChar || rest[0] == Path.AltDirectorySeparatorChar
+            ? "~" + rest
+            : path;
+    }
+
+    /// <summary>The setup file as the form shows it: relative to the source
+    /// folder when it lives there (the usual case — the folder is already on the
+    /// row above), otherwise the full path with the home folder shortened.</summary>
+    public static string SetupDisplay(string? sourceFolder, string? setupFile, string? home)
+    {
+        var setup = setupFile?.Trim() ?? "";
+        var source = sourceFolder?.Trim() ?? "";
+        if (setup.Length == 0) return "";
+        try
+        {
+            if (source.Length > 0 && IntuneWinWriter.IsInsideFolder(source, setup))
+                return Path.GetRelativePath(Path.GetFullPath(source), Path.GetFullPath(setup));
+        }
+        catch
+        {
+            // Half-typed or malformed path — fall through to showing it as typed.
+        }
+        return AbbreviateHome(setup, home);
+    }
+
     /// <summary>Card-footer readout for .msi setup files:
     /// "msi {ProductCode} · version · context".</summary>
     public static string MsiReadout(MsiInfo msi)

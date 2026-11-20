@@ -7,8 +7,9 @@ using Avalonia.Threading;
 namespace WrapTuneMacOS.UiTests;
 
 /// <summary>
-/// Design-review harness, not a test: renders the three flow states to PNGs so
-/// they can be compared against the design mocks. Inert unless
+/// Design-review harness, not a test: renders the flow states (plus the failed
+/// run, the inspector, and the Daylight theme) to PNGs so they can be compared
+/// against the design mocks. Inert unless
 /// WRAPTUNE_RENDER_DUMP is set to an output directory:
 ///   WRAPTUNE_RENDER_DUMP=/tmp/frames dotnet test --filter RenderHarness
 /// </summary>
@@ -91,12 +92,44 @@ public sealed class RenderHarness
             Pump(TimeSpan.FromMilliseconds(300));
             Capture(w, outDir, "state3-done.png");
 
-            // Daylight sanity frame (derived palette — not part of the mocks).
-            new AppSettings { Theme = "Daylight" }.Save();
+            // The inspector, on the package that run just produced.
+            var package = Directory.EnumerateFiles(outFolder, "*.intunewin").First();
+            var inspector = new InspectWindow(package);
+            inspector.Show();
+            var inspectDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+            while (DateTime.UtcNow < inspectDeadline &&
+                   inspector.FindControl<Button>("BtnExtract")!.IsEnabled == false)
+                Pump(TimeSpan.FromMilliseconds(100));
+            Pump(TimeSpan.FromMilliseconds(300));
+            Capture(inspector, outDir, "inspect.png");
+            inspector.Close();
+
+            // Failed run: same package again with overwrite off.
+            w.FindControl<Button>("BtnNewPackage")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Pump(TimeSpan.FromMilliseconds(200));
+            w.FindControl<ToggleSwitch>("ChkOverwrite")!.IsChecked = false;
+            Pump(TimeSpan.FromMilliseconds(200));
+            btn.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var failDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+            while (DateTime.UtcNow < failDeadline &&
+                   w.FindControl<TextBlock>("TxtStageName")!.Text != "Failed")
+                Pump(TimeSpan.FromMilliseconds(100));
+            Pump(TimeSpan.FromMilliseconds(300));
+            Capture(w, outDir, "state3-failed.png");
+            w.Close();
+
+            // Daylight frames (derived palette — not part of the mocks).
+            new AppSettings { Theme = "Daylight", ThemeChosen = true }.Save();
             var light = new MainWindow();
             light.Show();
             Pump(TimeSpan.FromMilliseconds(700));
             Capture(light, outDir, "state1-light.png");
+            light.FindControl<TextBox>("TxtSourceFolder")!.Text = src;
+            light.FindControl<TextBox>("TxtSetupFile")!.Text = Path.Combine(src, "Remediate-WindowsPatchHealth.msi");
+            light.FindControl<TextBox>("TxtOutputFolder")!.Text = outFolder;
+            light.FindControl<ToggleSwitch>("ChkSignPayload")!.IsChecked = true;
+            Pump(TimeSpan.FromMilliseconds(500));
+            Capture(light, outDir, "state2-light.png");
         }
         finally
         {

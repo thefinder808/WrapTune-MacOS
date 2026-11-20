@@ -38,6 +38,9 @@ public partial class MainWindow : Window
     private PackageStage? _activeStage;
     private int? _encryptPercent;
     private int? _zipPercent;
+    private string? _lastOutputPath;   // the package the last successful run produced
+    private string? _sizeHint;         // "est. 39.8 MB" once the source folder has been walked
+    private bool _themeChosen;         // false = follow the macOS appearance
     private readonly System.Diagnostics.Stopwatch _elapsed = new();
     private DispatcherTimer? _elapsedTimer;
     private DispatcherTimer? _spinTimer;
@@ -53,10 +56,14 @@ public partial class MainWindow : Window
         ApplyTheme(_theme);
         WireDragDrop();
         WireDerivedFields();
+        WirePathDisplays();
         WireSigningRefresh();
         UpdateSigningUi();
         UpdateFlowUi();
         Opened += (_, _) => StartLaunchUpdateCheck();
+        // Following the system appearance: brushes set from code must be
+        // re-resolved when macOS flips between light and dark.
+        ActualThemeVariantChanged += (_, _) => { if (PanelForm is not null) UpdateFlowUi(); };
     }
 
     // ── Settings ────────────────────────────────────────────────────────────
@@ -68,6 +75,9 @@ public partial class MainWindow : Window
         if (!string.IsNullOrEmpty(s.SetupFile)) TxtSetupFile.Text = s.SetupFile;
         if (!string.IsNullOrEmpty(s.OutputFolder)) TxtOutputFolder.Text = s.OutputFolder;
         _theme = string.IsNullOrEmpty(s.Theme) ? "Daylight" : s.Theme;
+        // Settings written before ThemeChosen existed: "Midnight" can only have
+        // been picked by hand (Daylight was the default), so keep honoring it.
+        _themeChosen = s.ThemeChosen || _theme == "Midnight";
         ChkOverwrite.IsChecked = s.Overwrite;
 
         // Signing settings (the password / PIN / token is never persisted).
@@ -98,6 +108,7 @@ public partial class MainWindow : Window
             s.SetupFile = TxtSetupFile.Text;
             s.OutputFolder = TxtOutputFolder.Text;
             s.Theme = _theme;
+            s.ThemeChosen = _themeChosen;
             s.Overwrite = ChkOverwrite.IsChecked == true;
 
             s.SignPayload = ChkSignPayload.IsChecked == true;
@@ -122,18 +133,30 @@ public partial class MainWindow : Window
 
     // ── Theme ─────────────────────────────────────────────────────────────--
 
+    /// <summary>Applies the named theme when the user has picked one; until
+    /// then the app follows the macOS appearance.</summary>
     private void ApplyTheme(string name)
     {
         var dark = name == "Midnight";
         if (Application.Current is { } app)
-            app.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
+            app.RequestedThemeVariant = !_themeChosen ? ThemeVariant.Default
+                : dark ? ThemeVariant.Dark : ThemeVariant.Light;
         _theme = dark ? "Midnight" : "Daylight";
         if (PanelForm is not null) UpdateFlowUi();   // re-resolve brushes set from code
     }
 
     private void OnToggleTheme(object? sender, EventArgs e)
     {
-        ApplyTheme(_theme == "Midnight" ? "Daylight" : "Midnight");
+        // Flip what's on screen now, which may be the system's choice.
+        _themeChosen = true;
+        ApplyTheme(ActualThemeVariant == ThemeVariant.Dark ? "Daylight" : "Midnight");
+        SaveCurrentSettings();
+    }
+
+    private void OnUseSystemTheme(object? sender, EventArgs e)
+    {
+        _themeChosen = false;
+        ApplyTheme(_theme);
         SaveCurrentSettings();
     }
 
@@ -335,6 +358,8 @@ public partial class MainWindow : Window
             return "Source folder is missing or does not exist.";
         if (string.IsNullOrWhiteSpace(TxtSetupFile.Text) || !File.Exists(TxtSetupFile.Text))
             return "Setup file is missing or does not exist.";
+        if (!IntuneWinWriter.IsInsideFolder(TxtSourceFolder.Text, TxtSetupFile.Text))
+            return IntuneWinWriter.SetupOutsideSourceError;
         if (string.IsNullOrWhiteSpace(TxtOutputFolder.Text))
             return "Output folder is not specified.";
         if (IntuneWinWriter.OutputNameError(TxtOutputName.Text) is { } nameError)
@@ -394,9 +419,41 @@ public partial class MainWindow : Window
     private void RefreshOutputName() =>
         TxtOutputName.Text = PackagingFlow.DefaultOutputName(TxtSourceFolder.Text, TxtSetupFile.Text);
 
-    /// <summary>The file name the package will be written as.</summary>
-    private string OutputFileName() =>
-        IntuneWinWriter.ResolveOutputName(TxtOutputName.Text, TxtSetupFile.Text ?? "") + ".intunewin";
+    // ── Path rows ───────────────────────────────────────────────────────────
+
+    /// <summary>Each path box has a read-only stand-in laid over it. While the
+    /// box isn't focused the stand-in shows a shortened path and the box goes
+    /// transparent (still clickable, still the value everything else reads);
+    /// focusing the box brings the full editable path back.</summary>
+    private void WirePathDisplays()
+    {
+        foreach (var box in new[] { TxtSourceFolder, TxtSetupFile, TxtOutputFolder })
+        {
+            box.GotFocus += (_, _) => RefreshPathDisplays();
+            box.LostFocus += (_, _) => RefreshPathDisplays();
+            box.TextChanged += (_, _) => RefreshPathDisplays();
+        }
+        RefreshPathDisplays();
+    }
+
+    private void RefreshPathDisplays()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        ShowPath(TxtSourceFolder, TxtSourceDisplay, PackagingFlow.AbbreviateHome(TxtSourceFolder.Text, home));
+        ShowPath(TxtSetupFile, TxtSetupDisplay,
+            PackagingFlow.SetupDisplay(TxtSourceFolder.Text, TxtSetupFile.Text, home));
+        ShowPath(TxtOutputFolder, TxtOutputDisplay, PackagingFlow.AbbreviateHome(TxtOutputFolder.Text, home));
+    }
+
+    private static void ShowPath(TextBox box, TextBlock display, string shortened)
+    {
+        var standIn = !box.IsFocused && shortened.Length > 0;
+        display.Text = shortened;
+        display.IsVisible = standIn;
+        box.Opacity = standIn ? 0 : 1;
+        // The stand-in may be trimmed or relative; the full path is a hover away.
+        ToolTip.SetTip(box, string.IsNullOrWhiteSpace(box.Text) ? null : box.Text);
+    }
 
     /// <summary>Every input <see cref="ValidateSigningInputs"/> reads refreshes the
     /// footer as it changes; no debounce — these checks are cheap and local,
@@ -448,9 +505,7 @@ public partial class MainWindow : Window
         var pathsSet = PathsSet();
         var ready = pathsSet >= 3;
         var signingOn = ChkSignPayload.IsChecked == true;
-        var signingValid = ValidateSigningInputs() is null;
-        var nameValid = IntuneWinWriter.OutputNameError(TxtOutputName.Text) is null;
-        var allValid = ready && nameValid && signingValid;
+        var allValid = ValidateInputs() is null;
 
         TxtSubtitleEmpty.IsVisible = !ready;
         TxtSubtitleReady.IsVisible = ready;
@@ -471,10 +526,10 @@ public partial class MainWindow : Window
         Step2Badge.Classes.Set("active", signingOn);
         TxtSignHint.IsVisible = !signingOn;
 
-        // Output preview appears in the footer once there's something to show.
-        TxtPackageHint.IsVisible = ready && !string.IsNullOrWhiteSpace(TxtSetupFile.Text);
-        if (TxtPackageHint.IsVisible)
-            TxtPackageHint.Text = $"→ {OutputFileName()}";
+        // The size estimate sits beside the action. (The output's name has its
+        // own row now, so repeating it here only squeezed the status text.)
+        TxtPackageHint.IsVisible = allValid && _sizeHint is not null;
+        TxtPackageHint.Text = _sizeHint;
 
         BtnPackage.IsEnabled = allValid;
         KbdChip.IsVisible = allValid;
@@ -524,9 +579,8 @@ public partial class MainWindow : Window
         TxtSourceSummary.Text = fileCount > 0
             ? PackagingFlow.SourceSummary(fileCount, totalBytes)
             : "or drop a folder anywhere";
-        if (BtnPackage.IsEnabled && !string.IsNullOrWhiteSpace(setup))
-            TxtPackageHint.Text =
-                $"→ {OutputFileName()} · est. {PackagingFlow.FormatSize(totalBytes)}";
+        _sizeHint = fileCount > 0 ? $"est. {PackagingFlow.FormatSize(totalBytes)}" : null;
+        if (!_running) UpdateFlowUi();
 
         if (!string.IsNullOrWhiteSpace(setup) && File.Exists(setup) &&
             Path.GetExtension(setup).Equals(".msi", StringComparison.OrdinalIgnoreCase))
@@ -643,8 +697,27 @@ public partial class MainWindow : Window
         BtnRawLog.Content = _rawLogVisible ? "raw log ▴" : "raw log ▾";
     }
 
+    /// <summary>Selects the package just built in Finder. Falls back to opening
+    /// the output folder when there's no package to point at (the File menu item
+    /// before a run, or the file has since been moved).</summary>
     private async void BtnOpenOutput_Click(object? sender, RoutedEventArgs e)
     {
+        if (OperatingSystem.IsMacOS() && _lastOutputPath is { } package && File.Exists(package))
+        {
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo("/usr/bin/open") { UseShellExecute = false };
+                psi.ArgumentList.Add("-R");
+                psi.ArgumentList.Add(package);
+                System.Diagnostics.Process.Start(psi)?.Dispose();
+                return;
+            }
+            catch
+            {
+                // Fall through to opening the folder.
+            }
+        }
+
         var dir = TxtOutputFolder.Text;
         if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
             await Launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(dir));
@@ -664,6 +737,7 @@ public partial class MainWindow : Window
         BuildStageRows(signing, isMsi);
 
         TxtRunTitle.Text = "Packaging";
+        TxtPercent.Foreground = B("Fg");
         TxtBreadcrumb.Text =
             $"{Path.GetFileName(Path.TrimEndingDirectorySeparator(source))}/ → {Path.GetFileName(setup)} → {Abbreviate(output)}";
         ChipSigned.IsVisible = signing;
@@ -784,7 +858,12 @@ public partial class MainWindow : Window
         BarRun.Value = 1;
         TxtPercent.Text = "Done";
         TxtStageName.Text = "Complete";
-        TxtBreadcrumb.Text += $" → {Path.GetFileName(outputPath)}";
+        TxtRunTitle.Text = "Packaged";
+        // File name first: the strip trims from the end, and the name is the
+        // one thing here that must never be cut off.
+        _lastOutputPath = outputPath;
+        TxtBreadcrumb.Text =
+            $"{Path.GetFileName(outputPath)}  ·  in {Abbreviate(Path.GetDirectoryName(outputPath) ?? "")}";
 
         _running = false;
         StopRunTimers();
@@ -807,6 +886,10 @@ public partial class MainWindow : Window
             SetStageState(stage, StageState.Error);
         }
         TxtStageName.Text = "Failed";
+        TxtRunTitle.Text = "Packaging failed";
+        // A frozen "16%" in the normal color reads as "still going".
+        TxtPercent.Text = "Failed";
+        TxtPercent.Foreground = B("Error");
 
         _running = false;
         StopRunTimers();
@@ -832,7 +915,7 @@ public partial class MainWindow : Window
         };
         var fraction = PackagingFlow.OverallFraction(_stageRows.Count, completed, inStage);
         BarRun.Value = fraction;
-        if (TxtPercent.Text != "Done")
+        if (TxtPercent.Text is not ("Done" or "Failed"))
             TxtPercent.Text = $"{(int)(fraction * 100)}%";
     }
 
@@ -991,13 +1074,8 @@ public partial class MainWindow : Window
             ? brush
             : Brushes.Transparent;
 
-    private static string Abbreviate(string path)
-    {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return !string.IsNullOrEmpty(home) && path.StartsWith(home, StringComparison.Ordinal)
-            ? "~" + path[home.Length..]
-            : path;
-    }
+    private static string Abbreviate(string path) =>
+        PackagingFlow.AbbreviateHome(path, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
     // ── Drag and drop (whole-window target) ─────────────────────────────────
 

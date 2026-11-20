@@ -1,7 +1,7 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="WrapTuneMacOS.App"
-             RequestedThemeVariant="Light">
+             RequestedThemeVariant="Default">
 
     <Application.Styles>
         <FluentTheme />
@@ -45,6 +45,18 @@
                     <!-- Fluent plumbing: remaining stock controls follow the accent,
                          and text boxes keep their flat look through hover/focus. -->
                     <Color x:Key="SystemAccentColor">#5B5EE8</Color>
+                    <!-- Switches: Fluent takes their "on" fill from the platform's
+                         accent shades, which the override above doesn't reach, so
+                         pin them to the app's accent (same block in Dark). -->
+                    <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#5B5EE8"/>
+                    <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#5B5EE8"/>
+                    <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#5B5EE8"/>
+                    <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#5B5EE8"/>
+                    <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="#5B5EE8"/>
+                    <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="#5B5EE8"/>
+                    <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#FFFFFF"/>
                     <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#8A8FA0"/>
                     <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#8A8FA0"/>
                     <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#8A8FA0"/>
@@ -74,6 +86,15 @@
                     <SolidColorBrush x:Key="Error" Color="#E06C60"/>
 
                     <Color x:Key="SystemAccentColor">#8B8DF7</Color>
+                    <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#8B8DF7"/>
+                    <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#8B8DF7"/>
+                    <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#8B8DF7"/>
+                    <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#8B8DF7"/>
+                    <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="#8B8DF7"/>
+                    <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="#8B8DF7"/>
+                    <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#14143A"/>
+                    <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#14143A"/>
+                    <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#14143A"/>
                     <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#62687A"/>
                     <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#62687A"/>
                     <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#62687A"/>

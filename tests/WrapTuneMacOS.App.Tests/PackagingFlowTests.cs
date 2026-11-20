@@ -61,6 +61,39 @@ public sealed class PackagingFlowTests
         Assert.Equal(expected, PackagingFlow.DefaultOutputName(source, setupPath));
     }
 
+    [Fact]
+    public void Home_folder_is_shortened_to_a_tilde()
+    {
+        var sep = Path.DirectorySeparatorChar;
+        var home = $"{sep}Users{sep}sam";
+
+        Assert.Equal($"~{sep}Packages{sep}Zoom", PackagingFlow.AbbreviateHome($"{home}{sep}Packages{sep}Zoom", home));
+        Assert.Equal("~", PackagingFlow.AbbreviateHome(home, home));
+        Assert.Equal($"~{sep}x", PackagingFlow.AbbreviateHome($"{home}{sep}x", home + sep));   // trailing slash on home
+        // A sibling whose name merely starts the same is not inside home.
+        Assert.Equal($"{sep}Users{sep}samantha{sep}x", PackagingFlow.AbbreviateHome($"{sep}Users{sep}samantha{sep}x", home));
+        Assert.Equal($"{sep}Volumes{sep}Share", PackagingFlow.AbbreviateHome($"{sep}Volumes{sep}Share", home));
+        Assert.Equal($"{sep}Volumes{sep}Share", PackagingFlow.AbbreviateHome($"{sep}Volumes{sep}Share", null));
+        Assert.Equal("", PackagingFlow.AbbreviateHome(null, home));
+    }
+
+    [Fact]
+    public void Setup_file_is_shown_relative_to_the_source_folder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wraptune-display");
+        var source = Path.Combine(root, "Zoom 6.1");
+
+        Assert.Equal("setup.msi", PackagingFlow.SetupDisplay(source, Path.Combine(source, "setup.msi"), null));
+        Assert.Equal(Path.Combine("Files", "setup.msi"),
+            PackagingFlow.SetupDisplay(source + Path.DirectorySeparatorChar, Path.Combine(source, "Files", "setup.msi"), null));
+
+        // Outside the source folder: the full path, so the mistake is visible.
+        var outside = Path.Combine(root, "elsewhere", "setup.msi");
+        Assert.Equal(outside, PackagingFlow.SetupDisplay(source, outside, null));
+        Assert.Equal(outside, PackagingFlow.SetupDisplay(null, outside, null));
+        Assert.Equal("", PackagingFlow.SetupDisplay(source, "  ", null));
+    }
+
     [Theory]
     [InlineData(0, "0 of 3 paths set")]
     [InlineData(2, "2 of 3 paths set")]

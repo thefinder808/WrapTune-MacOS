@@ -18,6 +18,9 @@ public sealed class MainWindowFlowTests
         var w = fixture.RunPackageToCompletion();
 
         Assert.Equal("Done", w.FindControl<TextBlock>("TxtPercent")!.Text);
+        Assert.Equal("Packaged", w.FindControl<TextBlock>("TxtRunTitle")!.Text);
+        // The file name leads the strip, so trimming can never hide it.
+        Assert.StartsWith("setup.intunewin", w.FindControl<TextBlock>("TxtBreadcrumb")!.Text);
         // A visible Package button after success invites an accidental
         // re-run — the success actions are Open output and ← new package.
         Assert.False(w.FindControl<Button>("BtnPackage")!.IsVisible);
@@ -44,6 +47,9 @@ public sealed class MainWindowFlowTests
             FlowFixture.Pump(TimeSpan.FromMilliseconds(50));
 
         Assert.Equal("Failed", w.FindControl<TextBlock>("TxtStageName")!.Text);
+        // The hero no longer keeps showing the percentage the run died at.
+        Assert.Equal("Failed", w.FindControl<TextBlock>("TxtPercent")!.Text);
+        Assert.Equal("Packaging failed", w.FindControl<TextBlock>("TxtRunTitle")!.Text);
         var package = w.FindControl<Button>("BtnPackage")!;
         Assert.True(package.IsVisible);   // retry is the natural action on error
         Assert.True(package.IsEnabled);
@@ -89,6 +95,55 @@ public sealed class MainWindowFlowTests
         w.FindControl<TextBox>("TxtOutputName")!.Text = "bad/name";
         FlowFixture.Pump(TimeSpan.FromMilliseconds(100));
         Assert.False(w.FindControl<Button>("BtnPackage")!.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void A_setup_file_outside_the_source_folder_is_caught_before_packaging()
+    {
+        using var fixture = new FlowFixture();
+        var elsewhere = Path.Combine(fixture.Root, "elsewhere.ps1");
+        File.WriteAllText(elsewhere, "Write-Host hi");
+        var w = new MainWindow();
+        w.Show();
+
+        w.FindControl<TextBox>("TxtSourceFolder")!.Text = Path.Combine(fixture.Root, "src");
+        w.FindControl<TextBox>("TxtSetupFile")!.Text = elsewhere;
+        w.FindControl<TextBox>("TxtOutputFolder")!.Text = Path.Combine(fixture.Root, "out");
+        FlowFixture.Pump(TimeSpan.FromMilliseconds(100));
+
+        Assert.False(w.FindControl<Button>("BtnPackage")!.IsEnabled);
+        Assert.Contains("inside the source folder", w.FindControl<TextBlock>("TxtStatus")!.Text);
+
+        w.FindControl<TextBox>("TxtSetupFile")!.Text = Path.Combine(fixture.Root, "src", "setup.ps1");
+        FlowFixture.Pump(TimeSpan.FromMilliseconds(100));
+        Assert.True(w.FindControl<Button>("BtnPackage")!.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void Path_rows_show_a_shortened_stand_in_until_the_box_is_focused()
+    {
+        using var fixture = new FlowFixture();
+        var w = new MainWindow();
+        w.Show();
+        var box = w.FindControl<TextBox>("TxtSetupFile")!;
+        var standIn = w.FindControl<TextBlock>("TxtSetupDisplay")!;
+
+        // Empty: the box stays visible so its watermark shows.
+        Assert.False(standIn.IsVisible);
+        Assert.Equal(1, box.Opacity);
+
+        w.FindControl<TextBox>("TxtSourceFolder")!.Text = Path.Combine(fixture.Root, "src");
+        box.Text = Path.Combine(fixture.Root, "src", "setup.ps1");
+        FlowFixture.Pump(TimeSpan.FromMilliseconds(100));
+        Assert.True(standIn.IsVisible);
+        Assert.Equal("setup.ps1", standIn.Text);                      // relative to the source folder
+        Assert.Equal(0, box.Opacity);
+        Assert.Equal(Path.Combine(fixture.Root, "src", "setup.ps1"), box.Text);   // the real value is untouched
+
+        box.Focus();
+        FlowFixture.Pump(TimeSpan.FromMilliseconds(100));
+        Assert.False(standIn.IsVisible);
+        Assert.Equal(1, box.Opacity);
     }
 
     /// <summary>Sandboxed settings + a tiny real payload, packaged for real.</summary>

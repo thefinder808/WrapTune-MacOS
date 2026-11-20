@@ -45,6 +45,7 @@
                         <NativeMenuItem Header="Zoom" Click="OnWindowZoom"/>
                         <NativeMenuItemSeparator/>
                         <NativeMenuItem Header="Toggle Theme" Gesture="Meta+T" Click="OnToggleTheme"/>
+                        <NativeMenuItem Header="Use System Appearance" Click="OnUseSystemTheme"/>
                     </NativeMenu>
                 </NativeMenuItem.Menu>
             </NativeMenuItem>
@@ -159,6 +160,20 @@
         <Style Selector="TextBox.value:focus /template/ Border#PART_BorderElement">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
+
+        <!-- Read-only stand-in shown over a path box while it isn't being
+             edited: home shortened to ~, and trimmed from the FRONT so the end of
+             the path — the part that tells two paths apart — stays visible. -->
+        <Style Selector="TextBlock.pathDisplay">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="TextAlignment" Value="Right"/>
+            <Setter Property="TextTrimming" Value="PrefixCharacterEllipsis"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+            <Setter Property="IsVisible" Value="False"/>
         </Style>
 
         <!-- ── signing input wells ── -->
@@ -374,6 +389,8 @@
                                         <TextBox x:Name="TxtSourceFolder" Grid.Column="1" Classes="value"
                                                  Margin="12,0" Watermark="none selected"
                                                  DragDrop.AllowDrop="True"/>
+                                        <TextBlock x:Name="TxtSourceDisplay" Grid.Column="1" Classes="pathDisplay"
+                                                   Margin="12,0"/>
                                         <Button x:Name="BtnBrowseSource" Grid.Column="2" Classes="browse"
                                                 Click="BtnBrowseSource_Click"/>
                                     </Grid>
@@ -384,6 +401,8 @@
                                         <TextBox x:Name="TxtSetupFile" Grid.Column="1" Classes="value"
                                                  Margin="12,0" Watermark="auto-detected from source"
                                                  DragDrop.AllowDrop="True"/>
+                                        <TextBlock x:Name="TxtSetupDisplay" Grid.Column="1" Classes="pathDisplay"
+                                                   Margin="12,0"/>
                                         <Button x:Name="BtnBrowseSetup" Grid.Column="2" Classes="browse"
                                                 Click="BtnBrowseSetup_Click"/>
                                     </Grid>
@@ -394,6 +413,8 @@
                                         <TextBox x:Name="TxtOutputFolder" Grid.Column="1" Classes="value"
                                                  Margin="12,0" Watermark="where the .intunewin lands"
                                                  DragDrop.AllowDrop="True"/>
+                                        <TextBlock x:Name="TxtOutputDisplay" Grid.Column="1" Classes="pathDisplay"
+                                                   Margin="12,0"/>
                                         <Button x:Name="BtnBrowseOutput" Grid.Column="2" Classes="browse"
                                                 Click="BtnBrowseOutput_Click"/>
                                     </Grid>
@@ -608,7 +629,7 @@
                         <Border x:Name="KbdChip" Classes="kbd" IsVisible="False">
                             <TextBlock Text="⌘R"/>
                         </Border>
-                        <Button x:Name="BtnOpenOutput" Classes="ghost" Content="Open output" IsVisible="False"
+                        <Button x:Name="BtnOpenOutput" Classes="ghost" Content="Reveal in Finder" IsVisible="False"
                                 Click="BtnOpenOutput_Click"/>
                         <Button x:Name="BtnCancel" Classes="ghost" Content="Cancel" IsVisible="False"
                                 Click="BtnCancel_Click"/>
