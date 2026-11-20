@@ -29,18 +29,21 @@
                     <SolidColorBrush x:Key="BorderSoftBrush" Color="#12000000"/>
                     <SolidColorBrush x:Key="HairlineSoft" Color="#0D000000"/>
                     <SolidColorBrush x:Key="ChipBorder" Color="#1A000000"/>
+                    <!-- Text colors are held to WCAG AA (4.5:1) against WindowBg,
+                         PanelBg and Panel2Bg — AccessibilityTests enforces it, so
+                         a new shade that's too faint fails the build, not a user. -->
                     <SolidColorBrush x:Key="Fg" Color="#1B1C22"/>
                     <SolidColorBrush x:Key="Dim" Color="#5A5F6E"/>
-                    <SolidColorBrush x:Key="Dimmer" Color="#8A8FA0"/>
+                    <SolidColorBrush x:Key="Dimmer" Color="#656A7B"/>
                     <SolidColorBrush x:Key="Accent" Color="#5B5EE8"/>
                     <SolidColorBrush x:Key="AccentSoft" Color="#1A5B5EE8"/>
                     <SolidColorBrush x:Key="AccentOn" Color="#FFFFFF"/>
                     <SolidColorBrush x:Key="AccentText" Color="#4548D6"/>
                     <SolidColorBrush x:Key="AccentLink" Color="#5457E0"/>
                     <SolidColorBrush x:Key="AccentBorder" Color="#665B5EE8"/>
-                    <SolidColorBrush x:Key="Success" Color="#2F8F63"/>
-                    <SolidColorBrush x:Key="SuccessSoft" Color="#262F8F63"/>
-                    <SolidColorBrush x:Key="Error" Color="#C24438"/>
+                    <SolidColorBrush x:Key="Success" Color="#237750"/>
+                    <SolidColorBrush x:Key="SuccessSoft" Color="#26237750"/>
+                    <SolidColorBrush x:Key="Error" Color="#B93E33"/>
 
                     <!-- Fluent plumbing: remaining stock controls follow the accent,
                          and text boxes keep their flat look through hover/focus. -->
@@ -57,9 +60,9 @@
                     <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFF"/>
                     <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFF"/>
                     <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#FFFFFF"/>
-                    <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#8A8FA0"/>
-                    <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#8A8FA0"/>
-                    <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#8A8FA0"/>
+                    <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#656A7B"/>
+                    <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#656A7B"/>
+                    <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#656A7B"/>
                 </ResourceDictionary>
 
                 <!-- Midnight (dark) — "Midnight v2", the designed theme. -->
@@ -74,7 +77,7 @@
                     <SolidColorBrush x:Key="ChipBorder" Color="#1AFFFFFF"/>
                     <SolidColorBrush x:Key="Fg" Color="#EDEEF3"/>
                     <SolidColorBrush x:Key="Dim" Color="#9BA0AE"/>
-                    <SolidColorBrush x:Key="Dimmer" Color="#62687A"/>
+                    <SolidColorBrush x:Key="Dimmer" Color="#80869B"/>
                     <SolidColorBrush x:Key="Accent" Color="#8B8DF7"/>
                     <SolidColorBrush x:Key="AccentSoft" Color="#248B8DF7"/>
                     <SolidColorBrush x:Key="AccentOn" Color="#14143A"/>
@@ -95,9 +98,9 @@
                     <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#14143A"/>
                     <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#14143A"/>
                     <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="#14143A"/>
-                    <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#62687A"/>
-                    <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#62687A"/>
-                    <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#62687A"/>
+                    <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#80869B"/>
+                    <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#80869B"/>
+                    <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#80869B"/>
                 </ResourceDictionary>
 
             </ResourceDictionary.ThemeDictionaries>

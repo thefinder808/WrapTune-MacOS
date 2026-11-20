@@ -61,7 +61,7 @@
 
         <TextBlock Grid.Row="0" Text="Inspect package" FontSize="19" FontWeight="SemiBold"
                    Foreground="{DynamicResource Fg}" LetterSpacing="-0.19"/>
-        <TextBlock x:Name="TxtPkgPath" Grid.Row="1" Margin="0,4,0,14"
+        <TextBlock x:Name="TxtPkgPath" AutomationProperties.Name="Package path" Grid.Row="1" Margin="0,4,0,14"
                    FontFamily="{StaticResource MonoFont}" FontSize="11" TextWrapping="Wrap"
                    Foreground="{DynamicResource Dim}"/>
 
@@ -104,7 +104,7 @@
         <!-- Verification verdict -->
         <Border Grid.Row="3" Classes="card" Margin="0,0,0,10" Padding="16,10">
             <StackPanel Spacing="4">
-                <TextBlock x:Name="TxtVerdict" FontWeight="SemiBold" FontSize="13.5" Text=""/>
+                <TextBlock x:Name="TxtVerdict" AutomationProperties.LiveSetting="Polite" FontWeight="SemiBold" FontSize="13.5" Text=""/>
                 <TextBlock x:Name="TxtChecks" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
                            Foreground="{DynamicResource Dim}" Text="Inspecting…"/>
             </StackPanel>
@@ -112,14 +112,14 @@
 
         <!-- Payload contents -->
         <Border Grid.Row="4" Classes="card" Padding="0,6" ClipToBounds="True">
-            <ListBox x:Name="LstEntries" Background="Transparent" BorderThickness="0"
+            <ListBox x:Name="LstEntries" AutomationProperties.Name="Payload contents" Background="Transparent" BorderThickness="0"
                      FontFamily="{StaticResource MonoFont}" FontSize="11.5"
                      Foreground="{DynamicResource Dim}"/>
         </Border>
 
         <!-- Footer -->
         <Grid Grid.Row="5" Margin="0,14,0,0" ColumnDefinitions="*,Auto">
-            <TextBlock x:Name="TxtInspectStatus" Grid.Column="0" VerticalAlignment="Center"
+            <TextBlock x:Name="TxtInspectStatus" AutomationProperties.LiveSetting="Polite" Grid.Column="0" VerticalAlignment="Center"
                        FontFamily="{StaticResource MonoFont}" FontSize="11.5" TextWrapping="Wrap"
                        Margin="0,0,14,0" Foreground="{DynamicResource Dim}"/>
             <Button x:Name="BtnExtract" Grid.Column="1" Classes="secondary"

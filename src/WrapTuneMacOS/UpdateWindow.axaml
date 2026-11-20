@@ -60,11 +60,11 @@
                                  Foreground="{DynamicResource Dim}" TextWrapping="Wrap"/>
         </ScrollViewer>
 
-        <ProgressBar x:Name="Bar" IsVisible="False" Minimum="0" Maximum="1" Height="6" MinHeight="6"
+        <ProgressBar x:Name="Bar" AutomationProperties.Name="Download progress" IsVisible="False" Minimum="0" Maximum="1" Height="6" MinHeight="6"
                      CornerRadius="3" Foreground="{DynamicResource Accent}"
                      Background="{DynamicResource Panel2Bg}"/>
 
-        <TextBlock x:Name="TxtUpdStatus" IsVisible="False" FontSize="11.5"
+        <TextBlock x:Name="TxtUpdStatus" AutomationProperties.LiveSetting="Polite" IsVisible="False" FontSize="11.5"
                    FontFamily="{StaticResource MonoFont}"
                    Foreground="{DynamicResource Dim}" TextWrapping="Wrap"/>
 
