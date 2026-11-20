@@ -74,12 +74,10 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
             return PackageResult.Fail("Setup file does not exist.");
 
         // The setup file must live inside the source folder (the format records a
-        // relative path). GetRelativePath normalises trailing slashes; a result
-        // that escapes upward ("..") or stays absolute means it's outside.
+        // relative path).
+        if (!IsInsideFolder(sourceFolder, setupFile))
+            return PackageResult.Fail(SetupOutsideSourceError);
         var relative = Path.GetRelativePath(sourceFolder, setupFile);
-        if (Path.IsPathRooted(relative) || relative == ".." ||
-            relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            return PackageResult.Fail("Setup file must be inside the source folder.");
 
         if (string.IsNullOrWhiteSpace(request.OutputFolder))
             return PackageResult.Fail("Output folder is not specified.");
@@ -93,9 +91,12 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
             .Replace('/', '\\');
         var setupName = Path.GetFileName(setupFile);
 
+        if (OutputNameError(request.OutputName) is { } nameError)
+            return PackageResult.Fail(nameError);
+
         var outputPath = Path.Combine(
             Path.GetFullPath(request.OutputFolder),
-            Path.GetFileNameWithoutExtension(setupFile) + ".intunewin");
+            ResolveOutputName(request.OutputName, setupFile) + PackageExtension);
 
         if (File.Exists(outputPath) && !request.Overwrite)
             return PackageResult.Fail($"Output already exists: {outputPath}. Enable overwrite to replace it.");
@@ -111,10 +112,8 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
             WarnIfTempSpaceLow(sourceFolder, work, log);
 
             // ── 1. Zip the source folder (the unencrypted payload) ──────────
-            // NOTE: ZipFile.CreateFromDirectory has no cancellation hook, so a
-            // cancel during this stage takes effect at the next stage boundary.
             log?.Report("Zipping payload…");
-            ZipFile.CreateFromDirectory(sourceFolder, innerZip, CompressionLevel.Optimal, includeBaseDirectory: false);
+            ZipSource(sourceFolder, innerZip, outputPath, log, ct);
             var unencryptedSize = new FileInfo(innerZip).Length;
 
             // ── 2. SHA-256 of the payload, before encryption ───────────────
@@ -183,6 +182,156 @@ public sealed class IntuneWinWriter : IIntuneWinPackager
         finally
         {
             try { Directory.Delete(work, recursive: true); } catch { /* best-effort temp cleanup */ }
+        }
+    }
+
+    // ── Setup file location ─────────────────────────────────────────────────
+
+    public const string SetupOutsideSourceError = "Setup file must be inside the source folder.";
+
+    /// <summary>True when <paramref name="file"/> is somewhere under
+    /// <paramref name="folder"/>. GetRelativePath normalises trailing slashes; a
+    /// result that escapes upward ("..") or stays absolute means it's outside.
+    /// Shared by the engine and the UI's live validation.</summary>
+    public static bool IsInsideFolder(string folder, string file)
+    {
+        var relative = Path.GetRelativePath(
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)), Path.GetFullPath(file));
+        return !(Path.IsPathRooted(relative) || relative is "." or ".." ||
+                 relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal));
+    }
+
+    // ── Output name ─────────────────────────────────────────────────────────
+
+    private const string PackageExtension = ".intunewin";
+
+    /// <summary>Characters an output name may not contain: path separators, plus
+    /// the rest of what Windows forbids in a file name — the package is handed to
+    /// Windows admins and tooling even though it is built here.</summary>
+    private static readonly char[] ForbiddenNameChars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
+
+    /// <summary>Why <paramref name="outputName"/> can't be used as the output
+    /// file's name, or null when it is fine (null/blank is fine: it means "use
+    /// the setup file's name"). Shared by the engine and the UI's live validation.</summary>
+    public static string? OutputNameError(string? outputName)
+    {
+        if (string.IsNullOrWhiteSpace(outputName)) return null;
+
+        var name = StripPackageExtension(outputName.Trim());
+        if (name.Length == 0 || name is "." or "..")
+            return "Output name is not a usable file name.";
+        if (name.IndexOfAny(ForbiddenNameChars) >= 0 || name.Any(char.IsControl))
+            return "Output name can't contain any of / \\ : * ? \" < > |";
+        return null;
+    }
+
+    /// <summary>The output file's name without its extension: the requested name
+    /// (a typed ".intunewin" is tolerated), or the setup file's name when none was given.</summary>
+    public static string ResolveOutputName(string? outputName, string setupFile) =>
+        string.IsNullOrWhiteSpace(outputName)
+            ? Path.GetFileNameWithoutExtension(setupFile)
+            : StripPackageExtension(outputName.Trim());
+
+    private static string StripPackageExtension(string name) =>
+        name.EndsWith(PackageExtension, StringComparison.OrdinalIgnoreCase)
+            ? name[..^PackageExtension.Length].TrimEnd()
+            : name;
+
+    // ── Payload zip ─────────────────────────────────────────────────────────
+
+    /// <summary>True for the per-folder metadata files macOS scatters around
+    /// (<c>.DS_Store</c>, and the <c>._name</c> AppleDouble files it writes on
+    /// network shares and non-Apple volumes). They are never part of a Windows
+    /// installer, so they are left out of the payload.</summary>
+    public static bool IsMacMetadataFile(string path)
+    {
+        var name = Path.GetFileName(path);
+        return name.Equals(".DS_Store", StringComparison.OrdinalIgnoreCase)
+               || name.StartsWith("._", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Zip <paramref name="sourceFolder"/> into <paramref name="zipPath"/>. Same
+    /// file set and entry names as <c>ZipFile.CreateFromDirectory</c> (which this
+    /// replaced), except that it leaves out macOS metadata files and a previous
+    /// copy of the output package when the output folder is inside the source —
+    /// otherwise every rebuild would wrap the last package inside the new one.
+    /// Copies chunk-by-chunk so progress is reported and cancellation takes
+    /// effect mid-file.
+    /// </summary>
+    private static void ZipSource(string sourceFolder, string zipPath, string outputPath,
+        IProgress<string>? log, CancellationToken ct)
+    {
+        // Case-insensitive on purpose: macOS volumes usually are, and two files
+        // differing only in case from the output package isn't a real payload.
+        bool IsLeftOut(FileSystemInfo f) =>
+            IsMacMetadataFile(f.Name) ||
+            string.Equals(f.FullName, outputPath, StringComparison.OrdinalIgnoreCase);
+
+        var files = new List<FileInfo>();
+        var emptyDirs = new List<DirectoryInfo>();
+        long totalBytes = 0;
+        int metadataSkipped = 0;
+        bool previousOutputSkipped = false;
+
+        foreach (var info in new DirectoryInfo(sourceFolder).EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
+        {
+            ct.ThrowIfCancellationRequested();
+            if (info is DirectoryInfo dir)
+            {
+                // Only a directory with nothing to package needs its own entry;
+                // any other is implied by the entries beneath it.
+                if (!dir.EnumerateFileSystemInfos().Any(e => e is DirectoryInfo || !IsLeftOut(e)))
+                    emptyDirs.Add(dir);
+            }
+            else if (IsMacMetadataFile(info.Name)) metadataSkipped++;
+            else if (IsLeftOut(info)) previousOutputSkipped = true;
+            else
+            {
+                files.Add((FileInfo)info);
+                totalBytes += ((FileInfo)info).Length;
+            }
+        }
+
+        if (metadataSkipped > 0)
+            log?.Report($"Left out {metadataSkipped} macOS metadata file{(metadataSkipped == 1 ? "" : "s")} (.DS_Store, ._*).");
+        if (previousOutputSkipped)
+            log?.Report("Left out the previous output package found inside the source folder.");
+
+        string EntryName(FileSystemInfo f) =>
+            Path.GetRelativePath(sourceFolder, f.FullName).Replace(Path.DirectorySeparatorChar, '/');
+
+        using var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create);
+        foreach (var dir in emptyDirs)
+            zip.CreateEntry(EntryName(dir) + "/");
+
+        var buffer = new byte[1 << 20];
+        long done = 0;
+        int lastReported = 0;
+        foreach (var file in files)
+        {
+            ct.ThrowIfCancellationRequested();
+            var entry = zip.CreateEntry(EntryName(file), CompressionLevel.Optimal);
+
+            // ZIP timestamps only span 1980–2107; outside that the setter throws.
+            var modified = file.LastWriteTime;
+            entry.LastWriteTime = modified.Year is >= 1980 and <= 2107 ? modified : new DateTime(1980, 1, 1);
+
+            using var source = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var dest = entry.Open();
+            int n;
+            while ((n = source.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                ct.ThrowIfCancellationRequested();
+                dest.Write(buffer, 0, n);
+                done += n;
+                var pct = totalBytes > 0 ? (int)(done * 100 / totalBytes) : 100;
+                if (pct >= lastReported + 10 && pct < 100)
+                {
+                    log?.Report($"Zipping… {pct}%");
+                    lastReported = pct;
+                }
+            }
         }
     }
 

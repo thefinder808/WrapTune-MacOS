@@ -7,8 +7,32 @@ namespace WrapTuneMacOS.Signing.Tests;
 /// The contract: a cancelled or timed-out run must never leave the child
 /// process alive (dispose only releases handles — it does not terminate).
 /// </summary>
+[Collection(ProcessTreeKillCollection.Name)]   // must not overlap another tree kill — see the collection
 public sealed class ProcessRunnerTests
 {
+    [Fact]
+    public void Every_class_that_kills_a_process_tree_is_in_the_non_parallel_collection()
+    {
+        // Two tree kills overlapping can hang up the whole process group — on
+        // CI that includes the runner's own agent (ProcessTreeKillCollection
+        // has the full story). Dropping either attribute brings the wedge back
+        // at random, so pin them.
+        foreach (var type in new[] { typeof(ProcessRunnerTests), typeof(AzureTokenProviderTests) })
+        {
+            var collection = type.GetCustomAttributes(typeof(CollectionAttribute), inherit: false);
+            Assert.True(collection.Length == 1, $"{type.Name} must be in the '{ProcessTreeKillCollection.Name}' collection.");
+            Assert.Equal(ProcessTreeKillCollection.Name,
+                type.GetCustomAttributesData()
+                    .Single(a => a.AttributeType == typeof(CollectionAttribute))
+                    .ConstructorArguments[0].Value);
+        }
+
+        var definition = typeof(ProcessTreeKillCollection).GetCustomAttributesData()
+            .Single(a => a.AttributeType == typeof(CollectionDefinitionAttribute));
+        Assert.Contains(definition.NamedArguments,
+            a => a.MemberName == nameof(CollectionDefinitionAttribute.DisableParallelization) && (bool)a.TypedValue.Value!);
+    }
+
     private static string WriteStub(string body)
     {
         var path = Path.Combine(Path.GetTempPath(), "wraptune-stub-" + Guid.NewGuid().ToString("N") + ".sh");

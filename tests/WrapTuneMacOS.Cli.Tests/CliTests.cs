@@ -54,6 +54,30 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
+    public async Task Pack_name_option_names_the_output_file()
+    {
+        var r = await RunAsync("pack", "-c", _src, "-s", Path.Combine(_src, "setup.ps1"), "-o", _out,
+            "--name", "Zoom 6.1");
+
+        var expected = Path.Combine(_out, "Zoom 6.1.intunewin");
+        Assert.Equal(0, r.Exit);
+        Assert.Contains(expected, r.Out);
+        Assert.True(IntuneWinReader.Read(expected).IsValid);
+        Assert.False(File.Exists(PackagePath));   // not also written under the setup file's name
+    }
+
+    [Fact]
+    public async Task Pack_rejects_a_name_that_is_a_path()
+    {
+        var r = await RunAsync("pack", "-c", _src, "-s", Path.Combine(_src, "setup.ps1"), "-o", _out,
+            "--name", "../elsewhere");
+
+        Assert.Equal(1, r.Exit);
+        Assert.Contains("Output name", r.Err);
+        Assert.Empty(Directory.EnumerateFiles(_root, "*.intunewin", SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public async Task Official_tool_style_flags_without_a_subcommand_mean_pack()
     {
         var r = await RunAsync("-c", _src, "-s", Path.Combine(_src, "setup.ps1"), "-o", _out);

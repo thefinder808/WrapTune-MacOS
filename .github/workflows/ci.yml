@@ -23,7 +23,7 @@ jobs:
     # purpose: a step timeout fails the step and lets the job finish, so its
     # logs are retained. A *job* timeout cancels the run, and GitHub keeps no
     # logs for a cancelled run at all -- which is exactly why the 2026-07 and
-    # 2026-08-04 hangs were never diagnosed.
+    # 2026-08-04 hangs went undiagnosed until 2026-11-20 (see the Test step).
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -56,6 +56,15 @@ jobs:
 
       # blame-hang fires at 4m, inside this step's 8m budget, so the dump is
       # written and uploaded rather than lost to the step timeout.
+      #
+      # These limits cover an ordinary hung test. They could not have caught the
+      # stalls this workflow kept hitting (2026-07, 08-04, 10-27, and four times
+      # on 2026-11-20), and those are now explained: two Signing test classes
+      # each kill a child process tree, they ran in parallel, and on macOS that
+      # overlap makes the kernel SIGHUP the whole process group — which on a
+      # hosted runner includes the runner's own agent. Nothing inside the job
+      # can report after that. The fix is in the tests, not here: see
+      # tests/WrapTuneMacOS.Signing.Tests/ProcessTreeKillCollection.cs.
       - name: Test
         timeout-minutes: 8
         run: >

@@ -50,6 +50,14 @@ nowhere in the chain.
   click away.
 - **Whole-window drag-and-drop** — drop a folder anywhere to set the source,
   drop an installer to set the setup file, drop a `.intunewin` to inspect it.
+  The row a drag would fill lights up, and the footer says what letting go will do.
+- **Batch queue** — drop several folders at once (or pick several in **File →
+  Choose Source Folder…**) and each becomes a package named after its folder,
+  built one after another with the same output folder and signing settings.
+  See [Packaging several folders](#packaging-several-folders).
+- **A receipt when it's done** — the package's name, size and location, with
+  **Reveal in Finder** and **copy path**. Drag the file straight from the receipt
+  into the Intune admin center's upload box.
 - **Optional Authenticode code-signing** of the payload before wrapping — sign
   your `.exe`/`.msi`/`.ps1` from the Mac with a local cert (PFX or PKCS#11/HSM) or
   **Azure Artifact Signing** — formerly Trusted Signing. Signing runs in-process;
@@ -59,7 +67,7 @@ nowhere in the chain.
   contents, and can extract the decrypted payload.
 - **`wraptune` CLI** — the same engine, scriptable: `pack`, `inspect`, and `extract`
   for CI and automation. See [Command line](#command-line).
-- Light / dark theme.
+- Light / dark theme that follows the macOS appearance until you pick one.
 - **In-app auto-updates** — checks GitHub Releases on launch (once a day) and from
   **Help → Check for Updates…**, then one-click download → verify → install → relaunch.
   Only a notarized, Developer-ID-signed build is ever installed.
@@ -82,8 +90,15 @@ build is notarized, Gatekeeper accepts it without the right-click-Open workaroun
 
 1. **Source folder** — the folder containing your installer and any supporting files.
 2. **Setup file** — the installer within that folder (`.exe`, `.msi`, `.ps1`, …).
+   It's picked for you when the choice is obvious: the folder's only installer,
+   or the PSADT launcher if there is one. **choose** lists every installer in the
+   folder, with **Browse…** for anything else.
 3. **Output folder** — where the `.intunewin` is written.
-4. Click **Package** (⌘R) — a staged progress view tracks sign → zip → encrypt →
+4. **Output name** — pre-filled with the setup file's name, as the official tool
+   names it. For a PSADT package it's pre-filled with the source folder's name
+   instead, since every PSADT package's setup file is called
+   `Invoke-AppDeployToolkit.exe` and they would otherwise replace each other.
+5. Click **Package** (⌘R) — a staged progress view tracks sign → zip → encrypt →
    assemble, with the raw engine log behind the *raw log* disclosure — then
    upload the result in the Intune admin center as a **Windows app (Win32)**.
 
@@ -92,10 +107,36 @@ build is notarized, Gatekeeper accepts it without the right-click-Open workaroun
 For `.msi` setup files, the package includes the MSI metadata Intune reads to
 pre-fill the product code (e.g. the uninstall command) and the install behavior.
 
+The payload is everything in the source folder except the files macOS adds on
+its own: `.DS_Store`, and the `._name` files it writes on network shares and
+non-Apple volumes. If the output folder is inside the source folder, the
+previous copy of the package is left out too, so rebuilding never wraps the old
+package inside the new one.
+
 To audit an existing package — yours or anyone's — drop a `.intunewin` anywhere
 on the window, or use **File → Inspect Package…** (⌘I): it shows the recorded
 metadata, verifies the HMAC, digest, and size exactly the way Intune's client
 would, lists the payload's files, and can save the decrypted payload zip.
+
+## Packaging several folders
+
+Drop two or more folders on the window and the Files card becomes a **Queue**:
+one row per folder, showing the setup file that will be used.
+
+- Each package is **named after its folder** (`Zoom 6.1/` → `Zoom 6.1.intunewin`).
+  That's what keeps a batch of PSADT packages apart, since their setup files
+  all share one name. Two folders with the same name get ` (2)`, ` (3)`….
+- The setup file is picked the same way as for a single package. A folder where
+  the choice isn't obvious says **choose a setup file**, and the batch won't
+  start until you have — **choose** lists that folder's installers.
+- **Output folder**, **Overwrite** and **Sign payload** apply to every package.
+- Packages are built one after another. One failing doesn't stop the rest;
+  **Cancel** stops the current one and leaves the remainder not run. The done
+  screen lists what each folder became, or why it didn't.
+
+Drop more folders to add them, **×** to remove one, **clear queue** to go back
+to a single package. The queue isn't saved between launches. For unattended
+batches, loop the [`wraptune` CLI](#command-line) with `--name` instead.
 
 ## Signing the payload (optional)
 
@@ -142,6 +183,9 @@ run in CI (the engine is pure managed .NET; it doesn't even need macOS).
 # Wrap an installer (flags mirror the official IntuneWinAppUtil)
 wraptune pack -c ./source -s ./source/setup.msi -o ./out
 
+# Name the output yourself (default: the setup file's name)
+wraptune pack -c ./Zoom -s ./Zoom/Invoke-AppDeployToolkit.exe -o ./out --name Zoom-6.1
+
 # Inspect + verify any .intunewin (exit 0 = valid, 1 = invalid)
 wraptune inspect ./out/setup.intunewin
 
@@ -163,8 +207,9 @@ official tool's `-a` Win10-S-mode catalog signing isn't reimplemented). Since
 v2.0 the window is a single three-step flow — a grouped **Files** card
 (source / setup / output / overwrite), an optional **Sign payload** step (see
 above) that the Windows tool delegates to a separate signing tool, and one
-**Package** action with a staged progress view. Light/dark theme lives under
-**Window → Toggle Theme** (⌘T).
+**Package** action with a staged progress view. The theme follows the macOS
+appearance; **Window → Toggle Theme** (⌘T) picks one by hand and **Window → Use
+System Appearance** goes back to following.
 
 ## Verifying a package
 

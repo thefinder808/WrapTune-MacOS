@@ -34,7 +34,7 @@ internal static class Cli
     /// <summary>Every flag any command accepts — unknown flags are usage errors.</summary>
     private static readonly HashSet<string> KnownFlags =
     [
-        "--source", "--setup", "--output", "--quiet", "--overwrite",
+        "--source", "--setup", "--output", "--name", "--quiet", "--overwrite",
         "--pfx", "--pkcs11-module", "--pkcs11-thumbprint",
         "--azure-endpoint", "--azure-account", "--azure-profile",
         "--timestamp-url", "--description", "--sign-url", "--sign-all",
@@ -101,7 +101,7 @@ internal static class Cli
         }
 
         var result = await new IntuneWinWriter().PackageAsync(
-            new PackageRequest(source, setup, output, overwrite), progress, ct);
+            new PackageRequest(source, setup, output, overwrite, opts.GetValueOrDefault("--name")), progress, ct);
         if (!result.Success)
         {
             stderr.WriteLine("error: " + result.Error);
@@ -301,7 +301,8 @@ internal static class Cli
           -c, --source <dir>     folder whose contents get packaged
           -s, --setup <file>     the installer inside the source folder
           -o, --output <dir>     where the .intunewin is written
-          -q, --quiet            suppress progress; silently overwrites (official -q)
+              --name <name>      output file name (default: the setup file's name)
+          -q, --quiet           suppress progress; silently overwrites (official -q)
               --overwrite        replace an existing .intunewin
 
         payload signing (optional — presence of a mode flag enables it):

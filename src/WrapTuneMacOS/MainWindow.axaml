@@ -45,6 +45,7 @@
                         <NativeMenuItem Header="Zoom" Click="OnWindowZoom"/>
                         <NativeMenuItemSeparator/>
                         <NativeMenuItem Header="Toggle Theme" Gesture="Meta+T" Click="OnToggleTheme"/>
+                        <NativeMenuItem Header="Use System Appearance" Click="OnUseSystemTheme"/>
                     </NativeMenu>
                 </NativeMenuItem.Menu>
             </NativeMenuItem>
@@ -84,6 +85,23 @@
         </Style>
         <Style Selector="Border.fieldRow.filled">
             <Setter Property="Height" Value="38"/>
+        </Style>
+        <!-- The row a drag is about to land on. -->
+        <Style Selector="Border.fieldRow.dropTarget">
+            <Setter Property="Background" Value="{DynamicResource AccentSoft}"/>
+        </Style>
+
+        <!-- ── drop zone (empty state) ── -->
+        <Style Selector="Panel.dropZone > Rectangle">
+            <Setter Property="Stroke" Value="{DynamicResource ChipBorder}"/>
+            <Setter Property="StrokeThickness" Value="1.5"/>
+            <Setter Property="StrokeDashArray" Value="4,4"/>
+            <Setter Property="RadiusX" Value="12"/>
+            <Setter Property="RadiusY" Value="12"/>
+        </Style>
+        <Style Selector="Panel.dropZone.dropTarget > Rectangle">
+            <Setter Property="Stroke" Value="{DynamicResource Accent}"/>
+            <Setter Property="Fill" Value="{DynamicResource AccentSoft}"/>
         </Style>
 
         <!-- ── step badges (numbered circles) ── -->
@@ -149,16 +167,33 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="TextAlignment" Value="Right"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="CornerRadius" Value="6"/>
             <Setter Property="MinHeight" Value="0"/>
         </Style>
         <Style Selector="TextBox.value:pointerover /template/ Border#PART_BorderElement">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
         </Style>
+        <!-- Focus must be visible: a soft accent well behind the path being
+             edited (which is also the row that has swapped to its full path). -->
         <Style Selector="TextBox.value:focus /template/ Border#PART_BorderElement">
-            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Background" Value="{DynamicResource AccentSoft}"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
+
+        <!-- Read-only stand-in shown over a path box while it isn't being
+             edited: home shortened to ~, and trimmed from the FRONT so the end of
+             the path — the part that tells two paths apart — stays visible. -->
+        <Style Selector="TextBlock.pathDisplay">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="TextAlignment" Value="Right"/>
+            <Setter Property="TextTrimming" Value="PrefixCharacterEllipsis"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+            <Setter Property="IsVisible" Value="False"/>
         </Style>
 
         <!-- ── signing input wells ── -->
@@ -308,6 +343,9 @@
         <Style Selector="RadioButton.seg:checked /template/ Border#segBg">
             <Setter Property="Background" Value="{DynamicResource AccentSoft}"/>
         </Style>
+        <!-- Keyboard focus: no style needed here. The template above replaces
+             the radio's visuals but not its FocusAdorner, so Fluent's focus ring
+             still draws (AccessibilityTests guards that it stays that way). -->
 
         <!-- ── switches: no on/off captions; accent comes from SystemAccentColor ── -->
         <Style Selector="ToggleSwitch">
@@ -324,6 +362,19 @@
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="12"/>
+        </Style>
+
+        <!-- ── batch queue ──
+             Last on purpose: these recolor text that also carries the monoHint /
+             pathDisplay / badge classes, and a later style wins a tie. -->
+        <Style Selector="TextBlock.queueProblem">
+            <Setter Property="Foreground" Value="{DynamicResource Error}"/>
+        </Style>
+        <Style Selector="Border.badge.failed">
+            <Setter Property="BorderBrush" Value="{DynamicResource Error}"/>
+        </Style>
+        <Style Selector="Border.badge.failed > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Error}"/>
         </Style>
     </Window.Styles>
 
@@ -363,46 +414,74 @@
                                     <Border x:Name="Step1Badge" Classes="badge">
                                         <TextBlock x:Name="Step1BadgeText" Text="1"/>
                                     </Border>
-                                    <TextBlock Grid.Column="1" Classes="stepTitle" Text="Files" Margin="10,0,0,0"/>
-                                    <TextBlock x:Name="TxtSourceSummary" Grid.Column="2" Classes="monoHint"
-                                               HorizontalAlignment="Right" Text="or drop a folder anywhere"/>
+                                    <TextBlock x:Name="TxtStep1Title" Grid.Column="1" Classes="stepTitle" Text="Files" Margin="10,0,0,0"/>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12"
+                                                HorizontalAlignment="Right">
+                                        <TextBlock x:Name="TxtSourceSummary" Classes="monoHint"
+                                                   Text="or drop a folder anywhere"/>
+                                        <Button x:Name="BtnClearQueue" Classes="link mono" Content="clear queue"
+                                                IsVisible="False" VerticalAlignment="Center"
+                                                Click="BtnClearQueue_Click"/>
+                                    </StackPanel>
                                 </Grid>
+
+                                <!-- Batch queue: one row per dropped folder, built in code.
+                                     While it shows, the three single-package rows below it
+                                     are hidden; output folder and overwrite apply to all. -->
+                                <StackPanel x:Name="QueueList" IsVisible="False"/>
 
                                 <Border x:Name="RowSource" Classes="fieldRow">
                                     <Grid ColumnDefinitions="140,*,Auto" VerticalAlignment="Center">
                                         <TextBlock Classes="fieldLabel" Text="Source folder"/>
-                                        <TextBox x:Name="TxtSourceFolder" Grid.Column="1" Classes="value"
-                                                 Margin="12,0" Watermark="none selected"
+                                        <TextBox x:Name="TxtSourceFolder" AutomationProperties.Name="Source folder" Grid.Column="1" Classes="value"
+                                                 Margin="6,0" Watermark="none selected"
                                                  DragDrop.AllowDrop="True"/>
-                                        <Button x:Name="BtnBrowseSource" Grid.Column="2" Classes="browse"
+                                        <TextBlock x:Name="TxtSourceDisplay" AutomationProperties.AccessibilityView="Raw" Grid.Column="1" Classes="pathDisplay"
+                                                   Margin="12,0"/>
+                                        <Button x:Name="BtnBrowseSource" AutomationProperties.Name="Browse for the source folder" Grid.Column="2" Classes="browse"
                                                 Click="BtnBrowseSource_Click"/>
                                     </Grid>
                                 </Border>
                                 <Border x:Name="RowSetup" Classes="fieldRow">
                                     <Grid ColumnDefinitions="140,*,Auto" VerticalAlignment="Center">
                                         <TextBlock Classes="fieldLabel" Text="Setup file"/>
-                                        <TextBox x:Name="TxtSetupFile" Grid.Column="1" Classes="value"
-                                                 Margin="12,0" Watermark="auto-detected from source"
+                                        <TextBox x:Name="TxtSetupFile" AutomationProperties.Name="Setup file" Grid.Column="1" Classes="value"
+                                                 Margin="6,0" Watermark="auto-detected from source"
                                                  DragDrop.AllowDrop="True"/>
-                                        <Button x:Name="BtnBrowseSetup" Grid.Column="2" Classes="browse"
+                                        <TextBlock x:Name="TxtSetupDisplay" AutomationProperties.AccessibilityView="Raw" Grid.Column="1" Classes="pathDisplay"
+                                                   Margin="12,0"/>
+                                        <Button x:Name="BtnBrowseSetup" AutomationProperties.Name="Choose the setup file" Grid.Column="2" Classes="browse"
+                                                Content="choose"
                                                 Click="BtnBrowseSetup_Click"/>
                                     </Grid>
                                 </Border>
                                 <Border x:Name="RowOutput" Classes="fieldRow">
                                     <Grid ColumnDefinitions="140,*,Auto" VerticalAlignment="Center">
                                         <TextBlock Classes="fieldLabel" Text="Output folder"/>
-                                        <TextBox x:Name="TxtOutputFolder" Grid.Column="1" Classes="value"
-                                                 Margin="12,0" Watermark="where the .intunewin lands"
+                                        <TextBox x:Name="TxtOutputFolder" AutomationProperties.Name="Output folder" Grid.Column="1" Classes="value"
+                                                 Margin="6,0" Watermark="where the .intunewin lands"
                                                  DragDrop.AllowDrop="True"/>
-                                        <Button x:Name="BtnBrowseOutput" Grid.Column="2" Classes="browse"
+                                        <TextBlock x:Name="TxtOutputDisplay" AutomationProperties.AccessibilityView="Raw" Grid.Column="1" Classes="pathDisplay"
+                                                   Margin="12,0"/>
+                                        <Button x:Name="BtnBrowseOutput" AutomationProperties.Name="Browse for the output folder" Grid.Column="2" Classes="browse"
                                                 Click="BtnBrowseOutput_Click"/>
+                                    </Grid>
+                                </Border>
+
+                                <Border x:Name="RowOutputName" Classes="fieldRow">
+                                    <Grid ColumnDefinitions="140,*,Auto" VerticalAlignment="Center">
+                                        <TextBlock Classes="fieldLabel" Text="Output name"/>
+                                        <TextBox x:Name="TxtOutputName" AutomationProperties.Name="Output name, without the .intunewin extension" Grid.Column="1" Classes="value"
+                                                 Margin="6,0" Watermark="named after the setup file"/>
+                                        <TextBlock Grid.Column="2" Classes="monoHint" VerticalAlignment="Center"
+                                                   Text=".intunewin"/>
                                     </Grid>
                                 </Border>
 
                                 <Border x:Name="RowOverwrite" Classes="fieldRow">
                                     <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                                         <TextBlock Classes="fieldLabel" Text="Overwrite existing output"/>
-                                        <ToggleSwitch x:Name="ChkOverwrite" Grid.Column="1" IsChecked="True"/>
+                                        <ToggleSwitch x:Name="ChkOverwrite" AutomationProperties.Name="Overwrite existing output" Grid.Column="1" IsChecked="True"/>
                                     </Grid>
                                 </Border>
 
@@ -430,7 +509,7 @@
                                     <TextBlock x:Name="TxtSignHint" Grid.Column="3" Classes="monoHint"
                                                HorizontalAlignment="Right" Margin="0,0,12,0"
                                                Text="needs a certificate"/>
-                                    <ToggleSwitch x:Name="ChkSignPayload" Grid.Column="4"
+                                    <ToggleSwitch x:Name="ChkSignPayload" AutomationProperties.Name="Sign payload" Grid.Column="4"
                                                   IsCheckedChanged="ChkSignPayload_IsCheckedChanged"/>
                                 </Grid>
 
@@ -439,13 +518,13 @@
                                     <!-- segmented cert-mode -->
                                     <Border CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
                                         <Grid ColumnDefinitions="*,1,*,1,*">
-                                            <RadioButton x:Name="RbPfx" Classes="seg" GroupName="certMode" IsChecked="True"
+                                            <RadioButton x:Name="RbPfx" AutomationProperties.Name="Sign with a PFX or P12 file" Classes="seg" GroupName="certMode" IsChecked="True"
                                                          IsCheckedChanged="RbCertMode_IsCheckedChanged" Content="pfx / .p12"/>
                                             <Border Grid.Column="1" Background="{DynamicResource BorderSoftBrush}"/>
-                                            <RadioButton x:Name="RbPkcs11" Grid.Column="2" Classes="seg" GroupName="certMode"
+                                            <RadioButton x:Name="RbPkcs11" AutomationProperties.Name="Sign with a PKCS 11 token or HSM" Grid.Column="2" Classes="seg" GroupName="certMode"
                                                          IsCheckedChanged="RbCertMode_IsCheckedChanged" Content="pkcs#11 / hsm"/>
                                             <Border Grid.Column="3" Background="{DynamicResource BorderSoftBrush}"/>
-                                            <RadioButton x:Name="RbTrustedSigning" Grid.Column="4" Classes="seg" GroupName="certMode"
+                                            <RadioButton x:Name="RbTrustedSigning" AutomationProperties.Name="Sign with Azure Artifact Signing" Grid.Column="4" Classes="seg" GroupName="certMode"
                                                          IsCheckedChanged="RbCertMode_IsCheckedChanged" Content="azure"/>
                                         </Grid>
                                     </Border>
@@ -453,26 +532,26 @@
                                     <!-- PFX -->
                                     <Grid x:Name="PanelPfx" ColumnDefinitions="*,10,*">
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <TextBox x:Name="TxtPfxPath" Classes="input" Watermark="path to .pfx / .p12"/>
-                                            <Button x:Name="BtnBrowsePfx" Grid.Column="1" Classes="browse" Margin="6,0,0,0"
+                                            <TextBox x:Name="TxtPfxPath" AutomationProperties.Name="Path to the PFX or P12 file" Classes="input" Watermark="path to .pfx / .p12"/>
+                                            <Button x:Name="BtnBrowsePfx" AutomationProperties.Name="Browse for the PFX or P12 file" Grid.Column="1" Classes="browse" Margin="6,0,0,0"
                                                     VerticalAlignment="Center" Click="BtnBrowsePfx_Click"/>
                                         </Grid>
-                                        <TextBox x:Name="TxtSecret" Grid.Column="2" Classes="input" PasswordChar="•"
+                                        <TextBox x:Name="TxtSecret" AutomationProperties.Name="PFX password" Grid.Column="2" Classes="input" PasswordChar="•"
                                                  Watermark="password"/>
                                     </Grid>
 
                                     <!-- PKCS#11 -->
                                     <StackPanel x:Name="PanelPkcs11" Spacing="9" IsVisible="False">
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <TextBox x:Name="TxtPkcs11Module" Classes="input"
+                                            <TextBox x:Name="TxtPkcs11Module" AutomationProperties.Name="PKCS 11 module path" Classes="input"
                                                      Watermark="pkcs#11 module (.dylib / .so)"/>
-                                            <Button x:Name="BtnBrowsePkcs11" Grid.Column="1" Classes="browse" Margin="6,0,0,0"
+                                            <Button x:Name="BtnBrowsePkcs11" AutomationProperties.Name="Browse for the PKCS 11 module" Grid.Column="1" Classes="browse" Margin="6,0,0,0"
                                                     VerticalAlignment="Center" Click="BtnBrowsePkcs11_Click"/>
                                         </Grid>
                                         <Grid ColumnDefinitions="*,10,*">
-                                            <TextBox x:Name="TxtPkcs11Thumbprint" Classes="input"
+                                            <TextBox x:Name="TxtPkcs11Thumbprint" AutomationProperties.Name="Certificate thumbprint, optional" Classes="input"
                                                      Watermark="cert thumbprint — optional for single-cert tokens"/>
-                                            <TextBox x:Name="TxtPkcs11Pin" Grid.Column="2" Classes="input" PasswordChar="•"
+                                            <TextBox x:Name="TxtPkcs11Pin" AutomationProperties.Name="Token PIN" Grid.Column="2" Classes="input" PasswordChar="•"
                                                      Watermark="pin"/>
                                         </Grid>
                                     </StackPanel>
@@ -480,15 +559,15 @@
                                     <!-- Azure Artifact Signing -->
                                     <StackPanel x:Name="PanelTrustedSigning" Spacing="9" IsVisible="False">
                                         <Grid ColumnDefinitions="*,10,*">
-                                            <TextBox x:Name="TxtTsEndpoint" Classes="input"
+                                            <TextBox x:Name="TxtTsEndpoint" AutomationProperties.Name="Azure signing endpoint" Classes="input"
                                                      Watermark="endpoint — e.g. eus.codesigning.azure.net"/>
-                                            <TextBox x:Name="TxtTsAccount" Grid.Column="2" Classes="input"
+                                            <TextBox x:Name="TxtTsAccount" AutomationProperties.Name="Azure signing account" Grid.Column="2" Classes="input"
                                                      Watermark="account"/>
                                         </Grid>
                                         <Grid ColumnDefinitions="*,10,*">
-                                            <TextBox x:Name="TxtTsProfile" Classes="input"
+                                            <TextBox x:Name="TxtTsProfile" AutomationProperties.Name="Azure certificate profile" Classes="input"
                                                      Watermark="certificate profile"/>
-                                            <TextBox x:Name="TxtTsToken" Grid.Column="2" Classes="input" PasswordChar="•"
+                                            <TextBox x:Name="TxtTsToken" AutomationProperties.Name="Azure access token, optional" Grid.Column="2" Classes="input" PasswordChar="•"
                                                      Watermark="token — blank = az login"/>
                                         </Grid>
                                         <TextBlock x:Name="TxtTsPrereq" Classes="footnote" TextWrapping="Wrap" LineHeight="17"/>
@@ -497,30 +576,42 @@
                                     <TextBlock Classes="footnote"
                                                Text="password never saved · signed in place · already-signed files skipped"/>
 
-                                    <Button x:Name="BtnAdvancedSigning" Classes="link" HorizontalAlignment="Left"
+                                    <Button x:Name="BtnAdvancedSigning" AutomationProperties.Name="Advanced signing options: timestamp, description, URL" Classes="link" HorizontalAlignment="Left"
                                             Content="advanced — timestamp, description, url ▾"
                                             Click="BtnAdvancedSigning_Click"/>
 
                                     <StackPanel x:Name="AdvancedSigning" Spacing="9" IsVisible="False">
                                         <Grid ColumnDefinitions="*,10,*">
-                                            <TextBox x:Name="TxtTimestampUrl" Classes="input"
+                                            <TextBox x:Name="TxtTimestampUrl" AutomationProperties.Name="RFC 3161 timestamp URL" Classes="input"
                                                      Watermark="rfc3161 timestamp url"/>
-                                            <TextBox x:Name="TxtSignDescription" Grid.Column="2" Classes="input"
+                                            <TextBox x:Name="TxtSignDescription" AutomationProperties.Name="Signature description" Grid.Column="2" Classes="input"
                                                      Watermark="signature description"/>
                                         </Grid>
                                         <Grid ColumnDefinitions="*,10,Auto" VerticalAlignment="Center">
-                                            <TextBox x:Name="TxtSignUrl" Classes="input" Watermark="signature url"/>
+                                            <TextBox x:Name="TxtSignUrl" AutomationProperties.Name="Signature URL" Classes="input" Watermark="signature url"/>
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
                                                         VerticalAlignment="Center">
                                                 <TextBlock Classes="footnote" VerticalAlignment="Center"
                                                            Text="sign all signable files"/>
-                                                <ToggleSwitch x:Name="ChkSignAllFiles"/>
+                                                <ToggleSwitch x:Name="ChkSignAllFiles" AutomationProperties.Name="Sign all signable files"/>
                                             </StackPanel>
                                         </Grid>
                                     </StackPanel>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
+
+                        <!-- Empty state: a visible place to drop. (The whole window
+                             accepts drops; this just says so where the eye lands.) -->
+                        <Panel x:Name="DropZone" Classes="dropZone" Height="104" Margin="0,16,0,0">
+                            <Rectangle/>
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="5">
+                                <TextBlock Text="Drop a folder here to package it" FontSize="13.5"
+                                           Foreground="{DynamicResource Dim}" HorizontalAlignment="Center"/>
+                                <TextBlock Classes="monoHint" HorizontalAlignment="Center"
+                                           Text="several folders to queue them · a .intunewin to inspect it"/>
+                            </StackPanel>
+                        </Panel>
 
                     </StackPanel>
 
@@ -535,7 +626,7 @@
                         </StackPanel>
 
                         <!-- context strip -->
-                        <Border Classes="card" CornerRadius="10" Height="40" Margin="0,16,0,0" Padding="14,0">
+                        <Border x:Name="BreadcrumbCard" Classes="card" CornerRadius="10" Height="40" Margin="0,16,0,0" Padding="14,0">
                             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                                 <TextBlock x:Name="TxtBreadcrumb" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
                                            Foreground="{DynamicResource Fg}" TextTrimming="CharacterEllipsis"
@@ -547,20 +638,84 @@
                         </Border>
 
                         <!-- progress hero -->
+                        <StackPanel x:Name="RunHero">
                         <Grid ColumnDefinitions="*,Auto" Margin="0,28,0,0">
                             <TextBlock x:Name="TxtPercent" Text="0%" FontSize="42" FontWeight="SemiBold"
                                        Foreground="{DynamicResource Fg}" LetterSpacing="-0.84"/>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                <TextBlock x:Name="TxtStageName" FontSize="13" Foreground="{DynamicResource Dim}"
+                                <TextBlock x:Name="TxtStageName" AutomationProperties.LiveSetting="Polite" FontSize="13" Foreground="{DynamicResource Dim}"
                                            HorizontalAlignment="Right" Text="Starting"/>
                                 <TextBlock x:Name="TxtElapsed" FontFamily="{StaticResource MonoFont}" FontSize="11"
                                            Foreground="{DynamicResource Dimmer}" HorizontalAlignment="Right"
                                            Text="00:00 elapsed"/>
                             </StackPanel>
                         </Grid>
-                        <ProgressBar x:Name="BarRun" Margin="0,14,0,0" Height="6" MinHeight="6"
+                        <ProgressBar x:Name="BarRun" AutomationProperties.Name="Packaging progress" Margin="0,14,0,0" Height="6" MinHeight="6"
                                      CornerRadius="3" Minimum="0" Maximum="1"
                                      Foreground="{DynamicResource Accent}" Background="{DynamicResource Panel2Bg}"/>
+                        </StackPanel>
+
+                        <!-- Done: the receipt replaces the strip and the hero. It answers
+                             "what did I get, and where" and hands the file over — reveal
+                             it, copy its path, or drag it straight into the Intune upload
+                             page in the browser. -->
+                        <Border x:Name="ReceiptCard" Classes="card" Margin="0,16,0,0" IsVisible="False">
+                            <StackPanel>
+                                <Border x:Name="ReceiptFile" Padding="16,14" Background="Transparent" Cursor="Hand"
+                                        ToolTip.Tip="Drag this into the Intune admin center's upload box"
+                                        PointerPressed="ReceiptFile_PointerPressed"
+                                        PointerMoved="ReceiptFile_PointerMoved"
+                                        PointerReleased="ReceiptFile_PointerReleased">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Border Classes="badge done" Width="30" Height="30" CornerRadius="15"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text="✓" FontSize="14"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="14,0,12,0" VerticalAlignment="Center">
+                                            <TextBlock x:Name="TxtReceiptName" FontFamily="{StaticResource MonoFont}"
+                                                       FontSize="14" FontWeight="Medium"
+                                                       Foreground="{DynamicResource Fg}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock x:Name="TxtReceiptSummary" Classes="monoHint" Margin="0,4,0,0"
+                                                       HorizontalAlignment="Left"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="2" Classes="chip">
+                                            <TextBlock Text="drag out ↗"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                                <Border Classes="fieldRow filled">
+                                    <Grid ColumnDefinitions="140,*,Auto" VerticalAlignment="Center">
+                                        <TextBlock Classes="fieldLabel" Text="Saved to"/>
+                                        <TextBlock x:Name="TxtReceiptLocation" Grid.Column="1" Classes="pathDisplay"
+                                                   IsVisible="True" Margin="12,0"/>
+                                        <Button x:Name="BtnCopyPath" Grid.Column="2" Classes="browse" Content="copy path"
+                                                AutomationProperties.Name="Copy the package's path"
+                                                Click="BtnCopyPath_Click"/>
+                                    </Grid>
+                                </Border>
+                                <Border Classes="fieldRow filled">
+                                    <Grid ColumnDefinitions="140,*" VerticalAlignment="Center">
+                                        <TextBlock Classes="fieldLabel" Text="Setup file"/>
+                                        <TextBlock x:Name="TxtReceiptSetup" Grid.Column="1" Classes="pathDisplay"
+                                                   IsVisible="True" Margin="12,0,0,0"/>
+                                    </Grid>
+                                </Border>
+                                <Border x:Name="RowReceiptMsi" Classes="fieldRow filled">
+                                    <Grid ColumnDefinitions="140,*" VerticalAlignment="Center">
+                                        <TextBlock Classes="fieldLabel" Text="MSI"/>
+                                        <TextBlock x:Name="TxtReceiptMsi" Grid.Column="1" Classes="pathDisplay"
+                                                   IsVisible="True" Margin="12,0,0,0"/>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Batch done: one line per queued folder — what it became, or why not. -->
+                        <Border x:Name="QueueResultCard" Classes="card" Margin="0,16,0,0" Padding="0,6"
+                                IsVisible="False">
+                            <StackPanel x:Name="QueueResultList"/>
+                        </Border>
 
                         <!-- stage list / raw log (same slot) -->
                         <Border x:Name="StageCard" Classes="card" Margin="0,18,0,0" Padding="0,6">
@@ -568,7 +723,7 @@
                         </Border>
                         <Border x:Name="RawLogCard" Classes="card" Margin="0,18,0,0" MinHeight="220"
                                 MaxHeight="300" IsVisible="False">
-                            <TextBox x:Name="TxtOutput" Classes="rawlog" IsReadOnly="True" TextWrapping="Wrap"
+                            <TextBox x:Name="TxtOutput" AutomationProperties.Name="Raw log" Classes="rawlog" IsReadOnly="True" TextWrapping="Wrap"
                                      AcceptsReturn="True" ScrollViewer.VerticalScrollBarVisibility="Auto"/>
                         </Border>
                     </StackPanel>
@@ -585,7 +740,7 @@
                     <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center" Margin="0,0,14,0">
                         <Button x:Name="BtnRawLog" Classes="link mono" Content="raw log ▾"
                                 IsVisible="False" Click="BtnRawLog_Click" Margin="0,0,14,0"/>
-                        <TextBlock x:Name="TxtStatus" Grid.Column="1"
+                        <TextBlock x:Name="TxtStatus" Grid.Column="1" AutomationProperties.LiveSetting="Polite"
                                    FontFamily="{StaticResource MonoFont}" FontSize="11.5"
                                    Foreground="{DynamicResource Dimmer}" VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis" Text="0 of 3 paths set"/>
@@ -598,7 +753,7 @@
                         <Border x:Name="KbdChip" Classes="kbd" IsVisible="False">
                             <TextBlock Text="⌘R"/>
                         </Border>
-                        <Button x:Name="BtnOpenOutput" Classes="ghost" Content="Open output" IsVisible="False"
+                        <Button x:Name="BtnOpenOutput" Classes="ghost" Content="Reveal in Finder" IsVisible="False"
                                 Click="BtnOpenOutput_Click"/>
                         <Button x:Name="BtnCancel" Classes="ghost" Content="Cancel" IsVisible="False"
                                 Click="BtnCancel_Click"/>
