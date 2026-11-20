@@ -50,6 +50,14 @@ nowhere in the chain.
   click away.
 - **Whole-window drag-and-drop** — drop a folder anywhere to set the source,
   drop an installer to set the setup file, drop a `.intunewin` to inspect it.
+  The row a drag would fill lights up, and the footer says what letting go will do.
+- **Batch queue** — drop several folders at once (or pick several in **File →
+  Choose Source Folder…**) and each becomes a package named after its folder,
+  built one after another with the same output folder and signing settings.
+  See [Packaging several folders](#packaging-several-folders).
+- **A receipt when it's done** — the package's name, size and location, with
+  **Reveal in Finder** and **copy path**. Drag the file straight from the receipt
+  into the Intune admin center's upload box.
 - **Optional Authenticode code-signing** of the payload before wrapping — sign
   your `.exe`/`.msi`/`.ps1` from the Mac with a local cert (PFX or PKCS#11/HSM) or
   **Azure Artifact Signing** — formerly Trusted Signing. Signing runs in-process;
@@ -82,6 +90,9 @@ build is notarized, Gatekeeper accepts it without the right-click-Open workaroun
 
 1. **Source folder** — the folder containing your installer and any supporting files.
 2. **Setup file** — the installer within that folder (`.exe`, `.msi`, `.ps1`, …).
+   It's picked for you when the choice is obvious: the folder's only installer,
+   or the PSADT launcher if there is one. **choose** lists every installer in the
+   folder, with **Browse…** for anything else.
 3. **Output folder** — where the `.intunewin` is written.
 4. **Output name** — pre-filled with the setup file's name, as the official tool
    names it. For a PSADT package it's pre-filled with the source folder's name
@@ -106,6 +117,26 @@ To audit an existing package — yours or anyone's — drop a `.intunewin` anywh
 on the window, or use **File → Inspect Package…** (⌘I): it shows the recorded
 metadata, verifies the HMAC, digest, and size exactly the way Intune's client
 would, lists the payload's files, and can save the decrypted payload zip.
+
+## Packaging several folders
+
+Drop two or more folders on the window and the Files card becomes a **Queue**:
+one row per folder, showing the setup file that will be used.
+
+- Each package is **named after its folder** (`Zoom 6.1/` → `Zoom 6.1.intunewin`).
+  That's what keeps a batch of PSADT packages apart, since their setup files
+  all share one name. Two folders with the same name get ` (2)`, ` (3)`….
+- The setup file is picked the same way as for a single package. A folder where
+  the choice isn't obvious says **choose a setup file**, and the batch won't
+  start until you have — **choose** lists that folder's installers.
+- **Output folder**, **Overwrite** and **Sign payload** apply to every package.
+- Packages are built one after another. One failing doesn't stop the rest;
+  **Cancel** stops the current one and leaves the remainder not run. The done
+  screen lists what each folder became, or why it didn't.
+
+Drop more folders to add them, **×** to remove one, **clear queue** to go back
+to a single package. The queue isn't saved between launches. For unattended
+batches, loop the [`wraptune` CLI](#command-line) with `--name` instead.
 
 ## Signing the payload (optional)
 

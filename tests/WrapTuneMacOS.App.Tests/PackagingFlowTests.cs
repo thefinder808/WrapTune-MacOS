@@ -94,6 +94,126 @@ public sealed class PackagingFlowTests
         Assert.Equal("", PackagingFlow.SetupDisplay(source, "  ", null));
     }
 
+    /// <summary>A throwaway folder holding the named (empty) files.</summary>
+    private static string FolderWith(params string[] relativeFiles)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wraptune-guess-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        foreach (var relative in relativeFiles)
+        {
+            var full = Path.Combine(root, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllText(full, "");
+        }
+        return root;
+    }
+
+    [Theory]
+    [InlineData("setup.msi", new[] { "setup.msi", "readme.txt" })]                       // the only installer
+    [InlineData("Invoke-AppDeployToolkit.exe",                                           // PSADT v4: exe + ps1 + helpers
+        new[] { "Invoke-AppDeployToolkit.exe", "Invoke-AppDeployToolkit.ps1", "Files/setup.msi" })]
+    [InlineData("Deploy-Application.exe",                                                // PSADT v3
+        new[] { "Deploy-Application.exe", "Deploy-Application.ps1", "ServiceUI.exe" })]
+    [InlineData(null, new[] { "setup.msi", "prereq.exe" })]                              // genuinely ambiguous
+    [InlineData(null, new[] { "readme.txt", "Files/setup.msi" })]                        // nothing at the top level
+    [InlineData("setup.exe", new[] { "setup.exe", "._setup.exe", ".DS_Store" })]         // mac metadata isn't a candidate
+    public void Setup_file_is_guessed_only_when_the_choice_is_obvious(string? expected, string[] files)
+    {
+        var folder = FolderWith(files);
+        try
+        {
+            var guess = PackagingFlow.GuessSetupFile(folder);
+            Assert.Equal(expected is null ? null : Path.Combine(folder, expected), guess);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Setup_guess_is_null_without_a_real_folder()
+    {
+        Assert.Null(PackagingFlow.GuessSetupFile(null));
+        Assert.Null(PackagingFlow.GuessSetupFile("  "));
+        Assert.Null(PackagingFlow.GuessSetupFile(Path.Combine(Path.GetTempPath(), "wraptune-does-not-exist")));
+    }
+
+    [Fact]
+    public void Installers_are_listed_nearest_the_top_first_and_capped()
+    {
+        var folder = FolderWith(
+            "Files/deep/zeta.exe", "b_setup.msi", "a_setup.exe", "Files/inner.msi",
+            "notes.txt", "._a_setup.exe", "Deploy.ps1");
+        try
+        {
+            var all = PackagingFlow.FindInstallers(folder);
+            Assert.Equal(
+                [
+                    "a_setup.exe", "b_setup.msi", "Deploy.ps1",
+                    Path.Combine("Files", "inner.msi"),
+                    Path.Combine("Files", "deep", "zeta.exe"),
+                ],
+                all.RelativePaths);
+            Assert.Equal(0, all.Omitted);
+
+            var capped = PackagingFlow.FindInstallers(folder, max: 2);
+            Assert.Equal(["a_setup.exe", "b_setup.msi"], capped.RelativePaths);
+            Assert.Equal(3, capped.Omitted);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+
+        Assert.Empty(PackagingFlow.FindInstallers(null).RelativePaths);
+        Assert.Empty(PackagingFlow.FindInstallers(Path.Combine(Path.GetTempPath(), "wraptune-nope")).RelativePaths);
+    }
+
+    [Fact]
+    public void Several_dropped_items_are_a_batch_only_when_all_are_folders()
+    {
+        (string, bool) Dir(string p) => (p, true);
+        (string, bool) File(string p) => (p, false);
+
+        // Several at once.
+        Assert.Equal(DropKind.Queue, PackagingFlow.ClassifyDrops([Dir("/a"), Dir("/b")], false, false));
+        Assert.Equal(DropKind.Queue, PackagingFlow.ClassifyDrops([Dir("/a"), Dir("/b")], true, false));
+        Assert.Null(PackagingFlow.ClassifyDrops([Dir("/a"), File("/b.msi")], false, false));
+        Assert.Null(PackagingFlow.ClassifyDrops([File("/a.intunewin"), File("/b.intunewin")], false, false));
+        Assert.Null(PackagingFlow.ClassifyDrops([], false, false));
+
+        // One item, no queue showing: routed exactly as before.
+        Assert.Equal(DropKind.SourceFolder, PackagingFlow.ClassifyDrops([Dir("/a")], false, false));
+        Assert.Equal(DropKind.OutputFolder, PackagingFlow.ClassifyDrops([Dir("/a")], true, false));
+        Assert.Equal(DropKind.SetupFile, PackagingFlow.ClassifyDrops([File("/a/setup.msi")], false, false));
+        Assert.Equal(DropKind.InspectPackage, PackagingFlow.ClassifyDrops([File("/a.intunewin")], false, false));
+
+        // One item while a queue is showing: a folder joins it; a loose installer has nowhere to go.
+        Assert.Equal(DropKind.Queue, PackagingFlow.ClassifyDrops([Dir("/a")], false, true));
+        Assert.Equal(DropKind.OutputFolder, PackagingFlow.ClassifyDrops([Dir("/a")], true, true));
+        Assert.Null(PackagingFlow.ClassifyDrops([File("/a/setup.msi")], false, true));
+        Assert.Equal(DropKind.InspectPackage, PackagingFlow.ClassifyDrops([File("/a.intunewin")], false, true));
+    }
+
+    [Theory]
+    [InlineData(DropKind.Queue, "drop to queue these folders")]
+    [InlineData(DropKind.SourceFolder, "drop to use as the source folder")]
+    [InlineData(DropKind.OutputFolder, "drop to use as the output folder")]
+    [InlineData(DropKind.SetupFile, "drop to use as the setup file")]
+    [InlineData(DropKind.InspectPackage, "drop to inspect this package")]
+    public void Drop_hint_says_what_letting_go_will_do(DropKind kind, string expected)
+        => Assert.Equal(expected, PackagingFlow.DropHint(kind));
+
+    [Fact]
+    public void Receipt_summary_lists_size_time_and_signing()
+    {
+        Assert.Equal("39.9 MB · built in 00:04",
+            PackagingFlow.ReceiptSummary(39_900_000, TimeSpan.FromSeconds(4), null));
+        Assert.Equal("1.5 KB · built in 01:05 · signed · azure",
+            PackagingFlow.ReceiptSummary(1_500, TimeSpan.FromSeconds(65), "signed · azure"));
+    }
+
     [Theory]
     [InlineData(0, "0 of 3 paths set")]
     [InlineData(2, "2 of 3 paths set")]

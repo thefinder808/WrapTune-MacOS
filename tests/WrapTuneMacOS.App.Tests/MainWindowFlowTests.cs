@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using WrapTuneMacOS.Services;
 
 namespace WrapTuneMacOS.UiTests;
 
@@ -21,6 +22,15 @@ public sealed class MainWindowFlowTests
         Assert.Equal("Packaged", w.FindControl<TextBlock>("TxtRunTitle")!.Text);
         // The file name leads the strip, so trimming can never hide it.
         Assert.StartsWith("setup.intunewin", w.FindControl<TextBlock>("TxtBreadcrumb")!.Text);
+
+        // The receipt takes over from the strip and the progress hero.
+        Assert.True(w.FindControl<Border>("ReceiptCard")!.IsVisible);
+        Assert.False(w.FindControl<Border>("BreadcrumbCard")!.IsVisible);
+        Assert.False(w.FindControl<StackPanel>("RunHero")!.IsVisible);
+        Assert.Equal("setup.intunewin", w.FindControl<TextBlock>("TxtReceiptName")!.Text);
+        Assert.Contains("built in", w.FindControl<TextBlock>("TxtReceiptSummary")!.Text);
+        Assert.Equal("setup.ps1", w.FindControl<TextBlock>("TxtReceiptSetup")!.Text);
+        Assert.False(w.FindControl<Border>("RowReceiptMsi")!.IsVisible);   // not an .msi
         // A visible Package button after success invites an accidental
         // re-run — the success actions are Open output and ← new package.
         Assert.False(w.FindControl<Button>("BtnPackage")!.IsVisible);
@@ -50,6 +60,9 @@ public sealed class MainWindowFlowTests
         // The hero no longer keeps showing the percentage the run died at.
         Assert.Equal("Failed", w.FindControl<TextBlock>("TxtPercent")!.Text);
         Assert.Equal("Packaging failed", w.FindControl<TextBlock>("TxtRunTitle")!.Text);
+        // The retry starts from the progress view again, not the last receipt.
+        Assert.False(w.FindControl<Border>("ReceiptCard")!.IsVisible);
+        Assert.True(w.FindControl<StackPanel>("RunHero")!.IsVisible);
         var package = w.FindControl<Button>("BtnPackage")!;
         Assert.True(package.IsVisible);   // retry is the natural action on error
         Assert.True(package.IsEnabled);
@@ -144,6 +157,72 @@ public sealed class MainWindowFlowTests
         FlowFixture.Pump(TimeSpan.FromMilliseconds(100));
         Assert.False(standIn.IsVisible);
         Assert.Equal(1, box.Opacity);
+    }
+
+    [AvaloniaFact]
+    public void Drop_zone_shows_only_while_there_is_no_source_folder()
+    {
+        using var fixture = new FlowFixture();
+        var w = new MainWindow();
+        w.Show();
+        var zone = w.FindControl<Panel>("DropZone")!;
+        Assert.True(zone.IsVisible);
+
+        w.FindControl<TextBox>("TxtSourceFolder")!.Text = Path.Combine(fixture.Root, "src");
+        FlowFixture.Pump(TimeSpan.FromMilliseconds(100));
+        Assert.False(zone.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void A_drag_lights_up_where_it_would_land_and_clears_afterwards()
+    {
+        using var fixture = new FlowFixture();
+        var w = new MainWindow();
+        w.Show();
+        var status = w.FindControl<TextBlock>("TxtStatus")!;
+        var before = status.Text;
+
+        w.ShowDropTarget(DropKind.SourceFolder);
+        Assert.Contains("dropTarget", w.FindControl<Border>("RowSource")!.Classes);
+        Assert.Contains("dropTarget", w.FindControl<Panel>("DropZone")!.Classes);
+        Assert.DoesNotContain("dropTarget", w.FindControl<Border>("RowOutput")!.Classes);
+        Assert.Equal("drop to use as the source folder", status.Text);
+
+        w.ShowDropTarget(DropKind.OutputFolder);
+        Assert.DoesNotContain("dropTarget", w.FindControl<Border>("RowSource")!.Classes);
+        Assert.Contains("dropTarget", w.FindControl<Border>("RowOutput")!.Classes);
+
+        w.ShowDropTarget(null);
+        Assert.DoesNotContain("dropTarget", w.FindControl<Border>("RowOutput")!.Classes);
+        Assert.DoesNotContain("dropTarget", w.FindControl<Panel>("DropZone")!.Classes);
+        Assert.Equal(before, status.Text);
+    }
+
+    [AvaloniaFact]
+    public void Setup_menu_lists_the_folders_installers_and_marks_the_current_one()
+    {
+        using var fixture = new FlowFixture();
+        var source = Path.Combine(fixture.Root, "src");
+        Directory.CreateDirectory(Path.Combine(source, "Files"));
+        File.WriteAllText(Path.Combine(source, "my_app_setup.exe"), "");   // underscores must survive
+        File.WriteAllText(Path.Combine(source, "Files", "inner.msi"), "");
+        var w = new MainWindow();
+        w.Show();
+        w.FindControl<TextBox>("TxtSourceFolder")!.Text = source;
+        w.FindControl<TextBox>("TxtSetupFile")!.Text = Path.Combine(source, "setup.ps1");
+        FlowFixture.Pump(TimeSpan.FromMilliseconds(100));
+
+        var menu = w.BuildSetupMenu(source, PackagingFlow.FindInstallers(source));
+        var items = menu.Items.OfType<MenuItem>().ToList();
+        var labels = items.Select(i => ((TextBlock)i.Header!).Text).ToList();
+
+        Assert.Equal(["my_app_setup.exe", "setup.ps1", Path.Combine("Files", "inner.msi"), "Browse…"], labels);
+        Assert.NotNull(items[1].Icon);   // setup.ps1 is the current choice
+        Assert.Null(items[0].Icon);
+
+        // Choosing an entry fills the setup file with its full path.
+        items[2].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal(Path.Combine(source, "Files", "inner.msi"), w.FindControl<TextBox>("TxtSetupFile")!.Text);
     }
 
     /// <summary>Sandboxed settings + a tiny real payload, packaged for real.</summary>
