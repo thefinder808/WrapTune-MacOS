@@ -23,7 +23,7 @@ jobs:
     # purpose: a step timeout fails the step and lets the job finish, so its
     # logs are retained. A *job* timeout cancels the run, and GitHub keeps no
     # logs for a cancelled run at all -- which is exactly why the 2026-07 and
-    # 2026-08-04 hangs were never diagnosed.
+    # 2026-08-04 hangs went undiagnosed until 2026-11-20 (see the Test step).
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -54,74 +54,29 @@ jobs:
         timeout-minutes: 5
         run: dotnet build --configuration Release --no-restore
 
-      # One step per test project, one after another.
+      # blame-hang fires at 4m, inside this step's 8m budget, so the dump is
+      # written and uploaded rather than lost to the step timeout.
       #
-      # On 2026-11-20 the single `dotnet test` step wedged three times on PR #34
-      # for 20+ minutes. Nothing inside the runner ended it — not blame-hang, not
-      # the step timeout, not even watchdog.sh's own five-minute kill — and
-      # GitHub kept no log for any of those runs. So the runner itself stops
-      # executing or reporting, and the only thing that still reaches GitHub is
-      # each step's status. Splitting makes that status say which project was
-      # running. It also runs the projects serially instead of four test hosts
-      # at once, which shows whether load is what tips the runner over.
-      #
-      # Each still runs under .github/scripts/watchdog.sh, for the hangs that
-      # ARE ordinary: output goes to a file, and at 3 minutes it prints the
-      # process list and the output so far before killing the tests. blame-hang
-      # is 2m with dump collection off — it kills the test host and names the
-      # running test without depending on a dump being written. A normal run
-      # is a few seconds per project; every limit here is far above that.
-      - name: "Test: Packaging"
-        timeout-minutes: 4
-        env:
-          WATCHDOG_LOG: test-output-packaging.log
+      # These limits cover an ordinary hung test. They could not have caught the
+      # stalls this workflow kept hitting (2026-07, 08-04, 10-27, and four times
+      # on 2026-11-20), and those are now explained: two Signing test classes
+      # each kill a child process tree, they ran in parallel, and on macOS that
+      # overlap makes the kernel SIGHUP the whole process group — which on a
+      # hosted runner includes the runner's own agent. Nothing inside the job
+      # can report after that. The fix is in the tests, not here: see
+      # tests/WrapTuneMacOS.Signing.Tests/ProcessTreeKillCollection.cs.
+      - name: Test
+        timeout-minutes: 8
         run: >
-          bash .github/scripts/watchdog.sh 180
-          dotnet test tests/WrapTuneMacOS.Packaging.Tests
-          --configuration Release --no-build
-          --logger "console;verbosity=normal"
-          --blame-hang --blame-hang-timeout 2m --blame-hang-dump-type none
+          dotnet test --configuration Release --no-build
+          --blame-hang --blame-hang-timeout 4m --blame-hang-dump-type mini
 
-      - name: "Test: Cli"
-        timeout-minutes: 4
-        env:
-          WATCHDOG_LOG: test-output-cli.log
-        run: >
-          bash .github/scripts/watchdog.sh 180
-          dotnet test tests/WrapTuneMacOS.Cli.Tests
-          --configuration Release --no-build
-          --logger "console;verbosity=normal"
-          --blame-hang --blame-hang-timeout 2m --blame-hang-dump-type none
-
-      - name: "Test: Signing"
-        timeout-minutes: 4
-        env:
-          WATCHDOG_LOG: test-output-signing.log
-        run: >
-          bash .github/scripts/watchdog.sh 180
-          dotnet test tests/WrapTuneMacOS.Signing.Tests
-          --configuration Release --no-build
-          --logger "console;verbosity=normal"
-          --blame-hang --blame-hang-timeout 2m --blame-hang-dump-type none
-
-      - name: "Test: App"
-        timeout-minutes: 4
-        env:
-          WATCHDOG_LOG: test-output-app.log
-        run: >
-          bash .github/scripts/watchdog.sh 180
-          dotnet test tests/WrapTuneMacOS.App.Tests
-          --configuration Release --no-build
-          --logger "console;verbosity=normal"
-          --blame-hang --blame-hang-timeout 2m --blame-hang-dump-type none
-
-      - name: Upload hang diagnostics
+      - name: Upload hang dumps
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: test-hang-diagnostics
           path: |
-            test-output-*.log
             **/TestResults/**/*.dmp
             **/TestResults/**/Sequence_*.xml
           if-no-files-found: ignore

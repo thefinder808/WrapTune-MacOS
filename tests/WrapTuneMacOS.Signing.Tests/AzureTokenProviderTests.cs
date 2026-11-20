@@ -2,6 +2,7 @@ using WrapTuneMacOS.Signing;
 
 namespace WrapTuneMacOS.Signing.Tests;
 
+[Collection(ProcessTreeKillCollection.Name)]   // its cancellation test kills a process tree — see the collection
 public sealed class AzureTokenProviderTests
 {
     [Fact]
